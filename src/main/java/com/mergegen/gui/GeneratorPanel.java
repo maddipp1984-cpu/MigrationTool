@@ -25,6 +25,7 @@ import javax.swing.tree.DefaultTreeModel;
 import java.awt.*;
 import java.util.*;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.stream.Collectors;
 
 /**
@@ -781,6 +782,117 @@ public class GeneratorPanel extends JPanel {
         Throwable t = ex;
         while (t.getCause() != null) t = t.getCause();
         return t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
+    }
+
+    // ── Workflow-Unterstützung ────────────────────────────────────────────────
+
+    /**
+     * Führt Analyse + Generierung mit den zuletzt gespeicherten Einstellungen aus.
+     * Wird vom Workflow-Panel für die automatisierte Gesamtausführung genutzt.
+     * Für Sequences werden ausschließlich gespeicherte Werte verwendet (kein Dialog).
+     *
+     * @param onComplete wird auf dem EDT mit true (Erfolg) oder false (Fehler/keine Einstellungen) aufgerufen
+     */
+    public void runWithLastSettings(Consumer<Boolean> onComplete) {
+        String       table  = appSettings.getLastTable();
+        String       column = appSettings.getLastColumn();
+        List<String> values = appSettings.getLastValues();
+
+        if (table.isEmpty() || values.isEmpty()) {
+            onComplete.accept(false);
+            return;
+        }
+
+        new SwingWorker<TraversalResult, Void>() {
+            @Override
+            protected TraversalResult doInBackground() throws Exception {
+                var config = settingsPanel.getCurrentConfig();
+                try (DatabaseConnection conn = new DatabaseConnection(config)) {
+                    SchemaAnalyzer   analyzer = new SchemaAnalyzer(conn.get(), config);
+                    TraversalService service  = new TraversalService(analyzer, virtualFkStore);
+                    if (values.size() == 1) {
+                        return service.traverse(table, column, values.get(0));
+                    }
+                    List<TraversalResult> results = new ArrayList<>();
+                    for (String v : values) results.add(service.traverse(table, column, v));
+                    return TraversalResult.merge(results);
+                }
+            }
+
+            @Override
+            protected void done() {
+                try {
+                    lastResult = get();
+                    lastTable  = table;
+                    lastColumn = column;
+                    lastIds    = values;
+                    executeGenerationAuto(onComplete);
+                } catch (Exception ex) {
+                    onComplete.accept(false);
+                }
+            }
+        }.execute();
+    }
+
+    /**
+     * Führt die Script-Generierung ohne Sequence-Dialoge durch (für den Workflow-Modus).
+     * Verwendet ausschließlich gespeicherte Sequence-Mappings aus dem Store.
+     */
+    private void executeGenerationAuto(Consumer<Boolean> onComplete) {
+        // Konstantentabellen aus Store (nicht aus Checkbox-UI)
+        List<TableRow> filteredRows = lastResult.getOrderedRows().stream()
+            .filter(r -> !constantTableStore.isConstant(r.getTableName()))
+            .collect(Collectors.toList());
+
+        Map<String, Integer> filteredCounts = new LinkedHashMap<>();
+        for (TableRow row : filteredRows) filteredCounts.merge(row.getTableName(), 1, Integer::sum);
+
+        // PK-Spalten pro Tabelle
+        Map<String, List<String>> tablePkMap = new LinkedHashMap<>();
+        for (TableRow row : filteredRows) {
+            String tbl = row.getTableName();
+            if (!tablePkMap.containsKey(tbl)) {
+                tablePkMap.put(tbl, row.getColumns().values().stream()
+                    .filter(ColumnInfo::isPrimaryKey)
+                    .map(ColumnInfo::getName)
+                    .collect(Collectors.toList()));
+            }
+        }
+
+        // Sequences aus Store – kein Dialog, unbekannte Tabellen → Quell-PK-Wert
+        Map<String, String> seqMap = new LinkedHashMap<>();
+        for (Map.Entry<String, List<String>> e : tablePkMap.entrySet()) {
+            String tbl = e.getKey();
+            for (String pkCol : e.getValue()) {
+                seqStore.findByTable(tbl).ifPresent(sm -> {
+                    if (sm.getPkColumn().equalsIgnoreCase(pkCol) && !sm.getSequenceName().isEmpty()) {
+                        seqMap.put(tbl + "." + pkCol, sm.getSequenceName());
+                    }
+                });
+            }
+        }
+
+        boolean includeUpdate = updateCheck.isSelected();
+
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() throws Exception {
+                return new ScriptWriter().write(
+                    filteredRows, filteredCounts,
+                    lastTable, lastIds,
+                    settingsPanel.getOutputDir(),
+                    seqMap,
+                    lastColumn, "",
+                    lastResult.getFkRelations(),
+                    includeUpdate);
+            }
+
+            @Override
+            protected void done() {
+                try { get(); onComplete.accept(true); }
+                catch (Exception ex) { onComplete.accept(false); }
+            }
+        }.execute();
     }
 
     /** Erstellt einen GridBagConstraints-Helfer mit voreingestellten Abständen. */

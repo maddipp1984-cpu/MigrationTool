@@ -4,6 +4,7 @@ import javax.swing.SwingWorker;
 import java.awt.Desktop;
 import java.nio.file.*;
 import java.util.List;
+import java.util.function.Consumer;
 
 /**
  * Presenter (MVP).
@@ -50,6 +51,38 @@ public class MainPresenter {
 
     private void refreshMasterFiles(Path masterDir) {
         view.setMasterFiles(masterDir, service.listMasterFiles(masterDir));
+    }
+
+    /**
+     * Verarbeitet alle ausgewählten Dateien programmatisch (ohne UI-Interaktion).
+     * Wird vom Workflow-Panel für die automatisierte Gesamtausführung genutzt.
+     * onComplete wird auf dem EDT mit true (Erfolg) oder false (nichts ausgewählt / Fehler) aufgerufen.
+     */
+    public void processAllFiles(Consumer<Boolean> onComplete) {
+        List<Path> selected = view.getSelectedFiles();
+        if (selected.isEmpty()) { onComplete.accept(false); return; }
+        String outText = view.getOutputDir().trim();
+        if (outText.isEmpty())  { onComplete.accept(false); return; }
+
+        config.setOutputDir(outText);
+        view.clearLog();
+        view.setProcessingActive(true);
+        Path outputDir = Paths.get(outText);
+
+        new SwingWorker<Path, String>() {
+            @Override protected Path doInBackground() {
+                return service.processFiles(selected, outputDir, this::publish);
+            }
+            @Override protected void process(List<String> chunks) {
+                chunks.forEach(view::appendLog);
+            }
+            @Override protected void done() {
+                view.setProcessingActive(false);
+                boolean success = false;
+                try { get(); success = true; } catch (Exception ignored) {}
+                onComplete.accept(success);
+            }
+        }.execute();
     }
 
     private void process() {

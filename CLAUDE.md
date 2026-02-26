@@ -47,11 +47,27 @@ MigrationTool/
 ## Launcher (LauncherApp)
 
 - Main-Class: `com.migrationtool.launcher.LauncherApp`
-- Single-Frame mit `BorderLayout`: Seitenleiste (WEST, 130 px) + Content-Bereich (CENTER, `CardLayout`)
-- Seitenleiste: 3 `JToggleButton` in `ButtonGroup` – MergeGen | ExcelSplit | Einstellungen
-- Cards: `mergegen` (JTabbedPane: Generator, Virtuelle FKs, Sequence-Mappings), `excelsplit` (`MainWindow.getContentPanel()`), `settings` (`SettingsPanel`)
+- Single-Frame mit `BorderLayout`: Seitenleiste (WEST, 155 px) + Content-Bereich (CENTER, `CardLayout`)
+- Navigationsbaum (JTree) mit fester Struktur:
+  - `Alles ausführen` → `WorkflowPanel` (immer ganz oben, nicht verschiebbar)
+  - Werkzeug-Kategorien (z.B. `Exceltools`, `Mergescripte`) → **per Drag & Drop umsortierbar**
+  - `Einstellungen` → `SettingsPanel` (immer ganz unten, nicht verschiebbar)
+- Cards: `workflow` (WorkflowPanel), `mergegen` (JTabbedPane), `excelsplit`, `settings`
 - Globale DB-Einstellungen: `SettingsPanel`-Instanz einmalig erstellt, als Card und als Parameter an `GeneratorPanel` übergeben
 - `MainFrame` wird im Launcher nicht verwendet – Panels direkt eingebettet
+
+### WorkflowPanel
+- Klasse: `com.migrationtool.launcher.WorkflowPanel`
+- Zeigt alle Werkzeug-Schritte der Reihe nach mit Status (○ Bereit / ◎ Läuft / ✓ OK / ✗ Fehler)
+- „Alle ausführen"-Button startet alle Schritte sequenziell; bei Fehler Abbruch
+- Jeder Schritt hat eigenen „Ausführen"-Button für Einzelausführung
+- `addStep(Step)` / `moveStep(int from, int to)` – bei DnD-Umsortierung synchron gehalten
+- MergeGen-Schritt im Auto-Modus: nutzt letzte AppSettings (Tabelle/Spalte/Werte), Sequences aus SequenceMappingStore (kein Dialog)
+
+### Drag & Drop (Navigationsbaum)
+- Nur Kategorieknoten (zwischen den fixen Knoten) sind verschiebbar
+- `TransferHandler` mit `DropMode.INSERT`: beim Drop werden Baummodell, `moveableNodes`-Liste und WorkflowPanel synchron aktualisiert
+- Reihenfolge wird sofort in `launcher.properties` gespeichert und beim nächsten Start wiederhergestellt
 
 ---
 
@@ -164,6 +180,7 @@ Alle im Arbeitsverzeichnis (neben `.jar` / `.bat`), kein Registry-Zugriff:
 | `query-presets.txt` | MergeGen | Gespeicherte Abfragen |
 | `table-history.txt` | MergeGen | Analyse-Verlauf |
 | `excel-split.properties` | ExcelSplit | masterDir, outputDir |
+| `launcher.properties`    | Launcher   | nav.order (Kategorie-Reihenfolge im Baum) |
 
 ## Nicht in Git
 - `build/`, `.gradle/`
