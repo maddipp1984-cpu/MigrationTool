@@ -1,0 +1,84 @@
+plugins {
+    id 'java'
+    id 'application'
+    id 'com.gradleup.shadow' version '8.3.6'
+}
+
+group = 'com.migrationtool'
+version = '1.0'
+sourceCompatibility = '11'
+targetCompatibility = '11'
+compileJava.options.encoding     = 'UTF-8'
+compileTestJava.options.encoding = 'UTF-8'
+
+application {
+    mainClass = 'com.migrationtool.launcher.LauncherApp'
+}
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+    implementation files('lib/ojdbc11.jar')
+    implementation 'org.apache.poi:poi-ooxml:5.2.5'
+
+    testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
+    testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
+}
+
+// ── Fat-JAR (Shadow) ─────────────────────────────────────────────────────────
+tasks.named('shadowJar') {
+    archiveBaseName   = 'MigrationTool'
+    archiveClassifier = ''
+    archiveVersion    = ''
+    mergeServiceFiles()
+}
+
+// ── jlink: Minimale JRE erzeugen ─────────────────────────────────────────────
+tasks.register('jlinkRuntime', Exec) {
+    dependsOn 'shadowJar'
+
+    def runtimeDir = layout.buildDirectory.dir('runtime').get().asFile
+    def jdkPath    = project.findProperty('jdkPath') ?: 'C:/Users/maddi/.jdks/openjdk-25.0.2'
+    def jlink      = "${jdkPath}/bin/jlink"
+
+    doFirst { delete runtimeDir }
+
+    commandLine jlink,
+        '--add-modules', 'java.base,java.desktop,java.sql,java.naming,java.logging',
+        '--strip-debug',
+        '--no-man-pages',
+        '--no-header-files',
+        '--compress=zip-6',
+        '--output', runtimeDir.absolutePath
+}
+
+// ── Release: Portabler Ordner ─────────────────────────────────────────────────
+tasks.register('release', Copy) {
+    dependsOn 'shadowJar', 'jlinkRuntime'
+
+    def releaseDir = layout.buildDirectory.dir('release/MigrationTool').get().asFile
+
+    from(tasks.named('shadowJar').map { it.archiveFile }) {
+        into '.'
+    }
+    from(layout.buildDirectory.dir('runtime')) {
+        into 'runtime'
+    }
+    into releaseDir
+
+    doLast {
+        file("${releaseDir}/MigrationTool.bat").text =
+            '@echo off\r\nstart "" "%~dp0runtime\\bin\\javaw.exe" -jar "%~dp0MigrationTool.jar"\r\n'
+        println "=== Release erstellt: ${releaseDir} ==="
+    }
+}

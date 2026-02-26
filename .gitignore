@@ -1,0 +1,26 @@
+# Build-Output
+build/
+.gradle/
+
+# Laufzeit-Konfiguration (lokale Daten, keine Secrets ins Repo)
+app.properties
+connections/
+virtual-fks.txt
+sequence-mappings.txt
+constant-tables.txt
+query-presets.txt
+table-history.txt
+excel-split.properties
+
+# Eingabe-Daten (echte Kundendaten)
+master/
+
+# Lokale IDE/Claude-Einstellungen
+.claude/settings.local.json
+.idea/
+*.iml
+.vscode/
+
+# OS
+Thumbs.db
+.DS_Store
