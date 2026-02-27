@@ -100,14 +100,14 @@ public class ZielDbPanel extends JPanel {
         } catch (IOException ignored) { return; }
         urlField.setText(p.getProperty("url",      "jdbc:oracle:thin:@//host:1521/service"));
         userField.setText(p.getProperty("user",    ""));
-        passField.setText(p.getProperty("password",""));
+        passField.setText("");
     }
 
     private void save() {
         Properties p = new Properties();
         p.setProperty("url",      getUrl());
         p.setProperty("user",     getUser());
-        p.setProperty("password", getPassword());
+        // Passwort wird nicht persistiert
         try (var out = Files.newOutputStream(PROPS_FILE)) {
             p.store(out, null);
             setStatus("Gespeichert", new Color(0, 140, 0));

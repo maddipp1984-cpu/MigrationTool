@@ -116,7 +116,7 @@ public class SettingsPanel extends JPanel {
                 }
             }
             userField.setText(props.getProperty("db.user", ""));
-            passwordField.setText(props.getProperty("db.password", ""));
+            passwordField.setText("");
             schemaField.setText(props.getProperty("db.schema", ""));
             setStatus("Profil geladen: " + selected, new Color(0, 130, 0));
         } catch (Exception ex) {
@@ -342,7 +342,7 @@ public class SettingsPanel extends JPanel {
         p.setProperty("db.port",     portField.getText().trim());
         p.setProperty("db.sid",      sidField.getText().trim());
         p.setProperty("db.user",     userField.getText().trim());
-        p.setProperty("db.password", new String(passwordField.getPassword()));
+        // Passwort wird nicht persistiert
         p.setProperty("db.schema",   schemaField.getText().trim().toUpperCase());
         return p;
     }
