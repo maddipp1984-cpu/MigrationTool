@@ -234,7 +234,7 @@ public class LauncherApp {
 
     // ── Persistenz der Schrittfolge ───────────────────────────────────────────
 
-    private static final Path NAV_PROPS = Paths.get("launcher.properties");
+    private static final Path NAV_PROPS = Paths.get("config/launcher/launcher.properties");
 
     private static List<String> loadNavOrder() {
         if (!Files.exists(NAV_PROPS)) return Collections.emptyList();
@@ -251,6 +251,9 @@ public class LauncherApp {
     private static void saveNavOrder(List<String> order) {
         Properties props = new Properties();
         props.setProperty("nav.order", String.join(",", order));
+        try {
+            Files.createDirectories(NAV_PROPS.getParent());
+        } catch (IOException ignored) {}
         try (var out = Files.newOutputStream(NAV_PROPS)) {
             props.store(out, null);
         } catch (IOException ignored) {}

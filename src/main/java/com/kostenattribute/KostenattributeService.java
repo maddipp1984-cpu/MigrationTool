@@ -20,7 +20,7 @@ public class KostenattributeService {
         "Spalte_06", "Spalte_07", "Spalte_08", "Spalte_09", "Spalte_10"
     };
 
-    private static final Path DATA_FILE = Paths.get("kostenattribute-data.csv");
+    private static final Path DATA_FILE = Paths.get("config/kostenattribute/kostenattribute-data.csv");
 
     // ── Persistenz ────────────────────────────────────────────────────────────
 
@@ -60,6 +60,7 @@ public class KostenattributeService {
      * Speichert Spaltennamen (in View-Reihenfolge) und Zeilen als CSV.
      */
     public void save(String[] columnNames, List<String[]> rows) throws IOException {
+        Files.createDirectories(DATA_FILE.getParent());
         try (BufferedWriter bw = Files.newBufferedWriter(DATA_FILE, StandardCharsets.UTF_8)) {
             List<String> header = new ArrayList<>();
             for (String name : columnNames) header.add(escapeCsv(name));

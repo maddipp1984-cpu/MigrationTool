@@ -17,7 +17,7 @@ public class AppConfig {
     private final Properties props = new Properties();
 
     public AppConfig(Path basePath) {
-        this.configFile = basePath.resolve("excel-split.properties");
+        this.configFile = basePath.resolve("config/excelsplit/excel-split.properties");
         load();
     }
 
@@ -47,6 +47,9 @@ public class AppConfig {
     }
 
     private void save() {
+        try {
+            Files.createDirectories(configFile.getParent());
+        } catch (IOException ignored) {}
         try (OutputStream out = Files.newOutputStream(configFile)) {
             props.store(out, "Excel Split – gespeicherte Verzeichnisse");
         } catch (IOException ignored) { }

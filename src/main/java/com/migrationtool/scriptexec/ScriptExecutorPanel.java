@@ -275,7 +275,7 @@ public class ScriptExecutorPanel extends JPanel {
             } catch (IOException ignored) {}
         }
         // Fallback: MergeGen-Ausgabeverzeichnis aus app.properties
-        Path appProps = Paths.get("app.properties");
+        Path appProps = Paths.get("config/mergegen/app.properties");
         if (Files.exists(appProps)) {
             Properties p = new Properties();
             try (var in = Files.newInputStream(appProps)) {

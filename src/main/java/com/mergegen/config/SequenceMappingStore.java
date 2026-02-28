@@ -17,7 +17,7 @@ import java.util.Optional;
  */
 public class SequenceMappingStore {
 
-    private static final String FILE_NAME = "sequence-mappings.txt";
+    private static final String FILE_NAME = "config/mergegen/sequence-mappings.txt";
     private static final String SEPARATOR = "|";
     private static final String COMMENT   = "#";
 
@@ -75,7 +75,9 @@ public class SequenceMappingStore {
     }
 
     private void save() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_NAME))) {
+        File file = new File(FILE_NAME);
+        file.getParentFile().mkdirs();
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
             writer.println("# Sequence-Zuordnungen fuer PK-Spalten");
             writer.println("# Format: TABLE_NAME|PK_COLUMN|SEQUENCE_NAME");
             for (SequenceMapping m : entries) {

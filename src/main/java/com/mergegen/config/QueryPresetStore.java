@@ -19,7 +19,7 @@ import java.util.stream.Collectors;
  */
 public class QueryPresetStore {
 
-    private static final String FILE_NAME = "query-presets.txt";
+    private static final String FILE_NAME = "config/mergegen/query-presets.txt";
     private static final String SEP       = "|";
     private static final String LIST_SEP  = ";";
     private static final String COMMENT   = "#";
@@ -76,7 +76,9 @@ public class QueryPresetStore {
     }
 
     private void save() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_NAME))) {
+        File file = new File(FILE_NAME);
+        file.getParentFile().mkdirs();
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
             writer.println("# Gespeicherte Abfrage-Presets");
             writer.println("# Format: NAME|TABLE|COLUMN|VALUE1;VALUE2");
             for (QueryPreset p : entries) {

@@ -13,7 +13,7 @@ import java.util.stream.Collectors;
  */
 public class AppSettings {
 
-    private static final String SETTINGS_FILE  = "app.properties";
+    private static final String SETTINGS_FILE  = "config/mergegen/app.properties";
     private static final String KEY_OUTPUT_DIR = "output.dir";
     private static final String KEY_LAST_TABLE  = "last.table";
     private static final String KEY_LAST_COLUMN = "last.column";
@@ -94,7 +94,9 @@ public class AppSettings {
 
     /** Schreibt die aktuellen Einstellungen in app.properties. */
     private void save() {
-        try (FileOutputStream fos = new FileOutputStream(SETTINGS_FILE)) {
+        File file = new File(SETTINGS_FILE);
+        file.getParentFile().mkdirs();
+        try (FileOutputStream fos = new FileOutputStream(file)) {
             props.store(fos, "Oracle Merge Script Generator - Anwendungseinstellungen");
         } catch (IOException ex) {
             System.err.println("app.properties konnte nicht gespeichert werden: " + ex.getMessage());

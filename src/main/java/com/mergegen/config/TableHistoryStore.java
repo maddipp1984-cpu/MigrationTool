@@ -23,7 +23,7 @@ public class TableHistoryStore {
     private final String filePath;
 
     public TableHistoryStore() {
-        this(".");
+        this("config/mergegen");
     }
 
     public TableHistoryStore(String baseDir) {
@@ -92,7 +92,9 @@ public class TableHistoryStore {
 
     /** Schreibt alle Einträge sofort in die Datei. */
     public void save() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
+        File file = new File(filePath);
+        file.getParentFile().mkdirs();
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
             writer.println("# Analyse-Verlauf");
             writer.println("# Format: TABLE|COLUMN|VAL1;VAL2|TIMESTAMP");
             for (TableHistoryEntry e : entries) {

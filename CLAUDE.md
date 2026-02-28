@@ -176,20 +176,25 @@ MigrationTool/
 
 ## Laufzeit-Konfigurationsdateien
 
-Alle im Arbeitsverzeichnis (neben `.jar` / `.bat`), kein Registry-Zugriff:
+Abgelegt unter `config/<tool>/` im Arbeitsverzeichnis, kein Registry-Zugriff. Verzeichnisse werden beim ersten Schreiben automatisch angelegt.
 
-| Datei | Tool | Inhalt |
-|-------|------|--------|
-| `app.properties` | MergeGen | output.dir, last.table, last.column |
-| `connections/*.properties` | MergeGen | JDBC-Profile (url, user, password, schema) |
-| `virtual-fks.txt` | MergeGen | Manuelle FK-Definitionen |
-| `sequence-mappings.txt` | MergeGen | Sequence-Zuordnungen |
-| `constant-tables.txt` | MergeGen | Stammdaten-Tabellen (fixe PKs) |
-| `query-presets.txt` | MergeGen | Gespeicherte Abfragen |
-| `table-history.txt` | MergeGen | Analyse-Verlauf |
-| `excel-split.properties` | ExcelSplit | masterDir, outputDir |
-| `launcher.properties`    | Launcher   | nav.order (Kategorie-Reihenfolge im Baum) |
+```
+config/
+├── mergegen/
+│   ├── app.properties           – output.dir, last.table, last.column
+│   ├── connections/             – JDBC-Profile (url, user, password, schema)
+│   ├── virtual-fks.txt          – Manuelle FK-Definitionen
+│   ├── sequence-mappings.txt    – Sequence-Zuordnungen
+│   ├── query-presets.txt        – Gespeicherte Abfragen
+│   └── table-history.txt        – Analyse-Verlauf
+├── excelsplit/
+│   └── excel-split.properties   – masterDir, outputDir
+├── kostenattribute/
+│   └── kostenattribute-data.csv – Spaltendefinitionen und Datenzeilen
+└── launcher/
+    └── launcher.properties      – nav.order (Kategorie-Reihenfolge im Baum)
+```
 
 ## Nicht in Git
 - `build/`, `.gradle/`
-- Alle oben genannten Laufzeit-Konfigurationsdateien
+- `config/` (gesamter Ordner)

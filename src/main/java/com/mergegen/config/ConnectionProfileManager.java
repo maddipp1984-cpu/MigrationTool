@@ -12,7 +12,7 @@ import java.util.*;
  */
 public class ConnectionProfileManager {
 
-    private static final String CONNECTIONS_DIR = "connections";
+    private static final String CONNECTIONS_DIR = "config/mergegen/connections";
 
     private final File directory;
 

@@ -3,6 +3,8 @@ build/
 .gradle/
 
 # Laufzeit-Konfiguration (lokale Daten, keine Secrets ins Repo)
+/config/
+# Legacy-Speicherorte (vor Umzug nach config/)
 app.properties
 connections/
 virtual-fks.txt

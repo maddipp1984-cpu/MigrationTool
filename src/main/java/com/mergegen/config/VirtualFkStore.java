@@ -20,7 +20,7 @@ import java.util.List;
  */
 public class VirtualFkStore {
 
-    private static final String FILE_NAME  = "virtual-fks.txt";
+    private static final String FILE_NAME  = "config/mergegen/virtual-fks.txt";
     private static final String SEPARATOR  = "|";
     private static final String COMMENT    = "#";
 
@@ -90,7 +90,9 @@ public class VirtualFkStore {
 
     /** Schreibt alle Einträge in virtual-fks.txt. */
     private void save() {
-        try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_NAME))) {
+        File file = new File(FILE_NAME);
+        file.getParentFile().mkdirs();
+        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
             writer.println("# Virtuelle FK-Definitionen");
             writer.println("# Format: CHILD_TABLE|FK_COLUMN|PARENT_TABLE|PARENT_PK_COLUMN");
             for (ForeignKeyRelation rel : entries) {
