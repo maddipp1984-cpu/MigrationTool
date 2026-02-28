@@ -1,4 +1,4 @@
-package com.migrationtool.launcher;
+package com.migrationtool.scriptexec;
 
 import javax.swing.*;
 import javax.swing.border.*;

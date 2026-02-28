@@ -11,12 +11,18 @@ constant-tables.txt
 query-presets.txt
 table-history.txt
 excel-split.properties
+kostenattribute-data.csv
+launcher.properties
 
-# Eingabe-Daten (echte Kundendaten)
+# Eingabe-Daten und Templates (echte Kundendaten)
 master/
+templates/
+
+# Build-Artefakte
+bin/
 
 # Lokale IDE/Claude-Einstellungen
-.claude/settings.local.json
+.claude/
 .idea/
 *.iml
 .vscode/

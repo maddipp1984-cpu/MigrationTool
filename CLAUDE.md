@@ -2,6 +2,13 @@
 
 Einzelnes Gradle-Projekt, das **MergeGen** (Oracle MERGE-Script-Generator) und **ExcelSplit** (Excel-zu-CSV-Konverter) in einem gemeinsamen Release mit geteilter JRE zusammenfasst. Single-Frame-Anwendung mit Seitenleiste – alle Tools werden im selben Fenster angezeigt.
 
+## Package-Regeln
+
+- Neue Klassen immer im fachlich passenden Package anlegen, **nicht** im Launcher-Package
+- `com.migrationtool.launcher` enthält nur `LauncherApp` und `WorkflowPanel` – keine Tool-Klassen
+- Jedes Tool bekommt ein eigenes Package (z.B. `com.migrationtool.scriptexec`, `com.kostenattribute`)
+- Bei Unsicherheit: bestehendes Package-Layout als Orientierung nehmen
+
 ## Projektstruktur
 
 ```
@@ -23,8 +30,9 @@ MigrationTool/
     │   │   ├── db/              (DatabaseConnection)
     │   │   └── model/           (ColumnInfo, TableRow, DependencyNode, ForeignKeyRelation, SequenceMapping, TraversalResult, QueryPreset, TableHistoryEntry)
     │   ├── com/excelsplit/      (ExcelSplit, AppConfig, ExcelSplitService, MainPresenter, MainWindow)
-    │   └── com/migrationtool/launcher/
-    │       └── LauncherApp.java
+    │   ├── com/kostenattribute/ (KostenattributePanel, KostenattributeService)
+    │   ├── com/migrationtool/scriptexec/ (ScriptExecutorPanel, ScriptExecutorService, ZielDbPanel)
+    │   └── com/migrationtool/launcher/  (LauncherApp, WorkflowPanel – NUR diese beiden)
     └── test/java/com/mergegen/  – 50 JUnit-5-Tests (keine DB nötig)
 ```
 

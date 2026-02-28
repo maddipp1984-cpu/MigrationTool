@@ -1,4 +1,4 @@
-package com.migrationtool.launcher;
+package com.migrationtool.scriptexec;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;

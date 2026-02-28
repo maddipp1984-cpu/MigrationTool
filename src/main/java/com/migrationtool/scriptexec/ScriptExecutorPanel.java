@@ -1,4 +1,4 @@
-package com.migrationtool.launcher;
+package com.migrationtool.scriptexec;
 
 import javax.swing.*;
 import javax.swing.border.*;
@@ -169,7 +169,6 @@ public class ScriptExecutorPanel extends JPanel {
             scriptListPanel.add(new JLabel("<html><i>Keine MERGE_*.sql-Dateien gefunden.</i></html>"));
         } else {
             for (Path f : found) {
-                // Tabellenname aus Dateiname extrahieren (MERGE_XXX.sql → XXX)
                 String fname = f.getFileName().toString();
                 String label = fname.substring("MERGE_".length(), fname.length() - ".sql".length());
                 JCheckBox cb = new JCheckBox(label, true);
@@ -196,7 +195,6 @@ public class ScriptExecutorPanel extends JPanel {
      * Scannt das Verzeichnis neu und führt alle gefundenen Scripts aus.
      */
     public void executeAll(Consumer<Boolean> onComplete) {
-        // Verzeichnis ggf. neu scannen wenn Liste leer
         if (checkBoxes.isEmpty()) {
             String dir = dirField.getText().trim();
             if (!dir.isEmpty()) scan(Paths.get(dir));
@@ -264,7 +262,6 @@ public class ScriptExecutorPanel extends JPanel {
     // ── Persistenz des Verzeichnisses ─────────────────────────────────────────
 
     private void loadDir() {
-        // 1. Gespeichertes Verzeichnis
         if (Files.exists(PROPS_FILE)) {
             Properties p = new Properties();
             try (var in = Files.newInputStream(PROPS_FILE)) {
@@ -277,7 +274,7 @@ public class ScriptExecutorPanel extends JPanel {
                 }
             } catch (IOException ignored) {}
         }
-        // 2. Fallback: MergeGen-Ausgabeverzeichnis aus app.properties
+        // Fallback: MergeGen-Ausgabeverzeichnis aus app.properties
         Path appProps = Paths.get("app.properties");
         if (Files.exists(appProps)) {
             Properties p = new Properties();

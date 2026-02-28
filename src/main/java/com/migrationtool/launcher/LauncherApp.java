@@ -8,6 +8,9 @@ import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.TableHistoryStore;
 import com.mergegen.config.VirtualFkStore;
+import com.kostenattribute.KostenattributePanel;
+import com.migrationtool.scriptexec.ScriptExecutorPanel;
+import com.migrationtool.scriptexec.ZielDbPanel;
 import com.mergegen.gui.GeneratorPanel;
 import com.mergegen.gui.SequenceMappingPanel;
 import com.mergegen.gui.SettingsPanel;
@@ -126,25 +129,34 @@ public class LauncherApp {
             saveNavOrder(finalStepOrder);
         });
 
+        // ── Kostenattribute-Panel ─────────────────────────────────────────────
+        KostenattributePanel kostenattributePanel = new KostenattributePanel();
+
         // ── Content-Bereich (CardLayout) ──────────────────────────────────────
         JPanel contentArea = new JPanel(new CardLayout());
-        contentArea.add(workflowPanel, "workflow");
-        contentArea.add(mergeGenPane,  "mergegen");
-        contentArea.add(excelPanel,    "excelsplit");
-        contentArea.add(scriptPanel,   "scriptexec");
-        contentArea.add(settingsPanel, "settings");
-        contentArea.add(zielDbPanel,   "zieldb");
+        contentArea.add(workflowPanel,        "workflow");
+        contentArea.add(mergeGenPane,         "mergegen");
+        contentArea.add(excelPanel,           "excelsplit");
+        contentArea.add(scriptPanel,          "scriptexec");
+        contentArea.add(settingsPanel,        "settings");
+        contentArea.add(zielDbPanel,          "zieldb");
+        contentArea.add(kostenattributePanel, "kostenattribute");
 
         // ── Navigationsbaum (statisch, nur zur Navigation) ────────────────────
         JScrollPane treePanel = buildNavTree(contentArea);
 
         // ── Hauptfenster ──────────────────────────────────────────────────────
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, treePanel, contentArea);
+        splitPane.setDividerLocation(155);
+        splitPane.setDividerSize(5);
+        splitPane.setContinuousLayout(true);
+        splitPane.setBorder(null);
+
         JFrame frame = new JFrame("Migration Tools");
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setMinimumSize(new Dimension(820, 560));
         frame.setLayout(new BorderLayout());
-        frame.add(treePanel,   BorderLayout.WEST);
-        frame.add(contentArea, BorderLayout.CENTER);
+        frame.add(splitPane, BorderLayout.CENTER);
         frame.pack();
         frame.setLocationRelativeTo(null);
         frame.setVisible(true);
@@ -162,8 +174,9 @@ public class LauncherApp {
         DefaultMutableTreeNode workflowNode    = new DefaultMutableTreeNode("Alles ausführen");
         DefaultMutableTreeNode exceltools      = new DefaultMutableTreeNode("Exceltools");
         DefaultMutableTreeNode excelSplit      = new DefaultMutableTreeNode("Excel Split");
-        DefaultMutableTreeNode mergescripte    = new DefaultMutableTreeNode("Mergescripte");
-        DefaultMutableTreeNode mergeGen        = new DefaultMutableTreeNode("MERGE Generator");
+        DefaultMutableTreeNode mergescripte         = new DefaultMutableTreeNode("Mergescripte");
+        DefaultMutableTreeNode mergeGen             = new DefaultMutableTreeNode("MERGE Generator");
+        DefaultMutableTreeNode kostenattribute      = new DefaultMutableTreeNode("Kostenattribute (Migration SUEWAG)");
         DefaultMutableTreeNode scriptAusfuehren = new DefaultMutableTreeNode("Script ausführen");
         DefaultMutableTreeNode zielDbAusfuehren = new DefaultMutableTreeNode("Ziel-DB ausführen");
         DefaultMutableTreeNode einstellungen   = new DefaultMutableTreeNode("Einstellungen");
@@ -172,6 +185,7 @@ public class LauncherApp {
 
         exceltools.add(excelSplit);
         mergescripte.add(mergeGen);
+        mergescripte.add(kostenattribute);
         scriptAusfuehren.add(zielDbAusfuehren);
         einstellungen.add(dbVerbindung);
         einstellungen.add(zielDbSettings);
@@ -187,6 +201,7 @@ public class LauncherApp {
         nodeCards.put(workflowNode,     "workflow");
         nodeCards.put(excelSplit,       "excelsplit");
         nodeCards.put(mergeGen,         "mergegen");
+        nodeCards.put(kostenattribute,  "kostenattribute");
         nodeCards.put(zielDbAusfuehren, "scriptexec");
         nodeCards.put(dbVerbindung,     "settings");
         nodeCards.put(zielDbSettings,   "zieldb");
@@ -213,8 +228,7 @@ public class LauncherApp {
         ((CardLayout) contentArea.getLayout()).show(contentArea, "mergegen");
 
         JScrollPane scrollPane = new JScrollPane(tree);
-        scrollPane.setPreferredSize(new Dimension(155, 0));
-        scrollPane.setBorder(BorderFactory.createMatteBorder(0, 0, 0, 1, Color.LIGHT_GRAY));
+        scrollPane.setBorder(null);
         return scrollPane;
     }
 
