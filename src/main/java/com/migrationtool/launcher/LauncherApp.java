@@ -4,7 +4,6 @@ import com.excelsplit.AppConfig;
 import com.excelsplit.ExcelSplitService;
 import com.excelsplit.MainPresenter;
 import com.excelsplit.MainWindow;
-import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.TableHistoryStore;
@@ -50,12 +49,11 @@ public class LauncherApp {
         // ── MergeGen-Stores ───────────────────────────────────────────────────
         VirtualFkStore       virtualFkStore = new VirtualFkStore();
         SequenceMappingStore seqStore       = new SequenceMappingStore();
-        ConstantTableStore   constStore     = new ConstantTableStore();
         QueryPresetStore     presetStore    = new QueryPresetStore();
         TableHistoryStore    historyStore   = new TableHistoryStore();
 
         // ── MergeGen-Panels ───────────────────────────────────────────────────
-        GeneratorPanel       generatorPanel = new GeneratorPanel(settingsPanel, virtualFkStore, seqStore, constStore, presetStore, historyStore);
+        GeneratorPanel       generatorPanel = new GeneratorPanel(settingsPanel, virtualFkStore, seqStore, presetStore, historyStore);
         VirtualFkPanel       vfkPanel       = new VirtualFkPanel(virtualFkStore);
         SequenceMappingPanel seqPanel       = new SequenceMappingPanel(seqStore);
 

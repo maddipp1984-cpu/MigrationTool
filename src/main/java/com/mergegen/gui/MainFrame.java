@@ -1,6 +1,5 @@
 package com.mergegen.gui;
 
-import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.TableHistoryStore;
@@ -21,13 +20,12 @@ public class MainFrame extends JFrame {
         setMinimumSize(new Dimension(650, 480));
         setIconImages(createAppIcons());
 
-        VirtualFkStore        virtualFkStore      = new VirtualFkStore();
-        SequenceMappingStore  seqStore            = new SequenceMappingStore();
-        ConstantTableStore    constantTableStore  = new ConstantTableStore();
-        QueryPresetStore      presetStore         = new QueryPresetStore();
-        TableHistoryStore     historyStore        = new TableHistoryStore();
-        SettingsPanel         settingsPanel       = new SettingsPanel();
-        GeneratorPanel        generatorPanel      = new GeneratorPanel(settingsPanel, virtualFkStore, seqStore, constantTableStore, presetStore, historyStore);
+        VirtualFkStore        virtualFkStore = new VirtualFkStore();
+        SequenceMappingStore  seqStore       = new SequenceMappingStore();
+        QueryPresetStore      presetStore    = new QueryPresetStore();
+        TableHistoryStore     historyStore   = new TableHistoryStore();
+        SettingsPanel         settingsPanel  = new SettingsPanel();
+        GeneratorPanel        generatorPanel = new GeneratorPanel(settingsPanel, virtualFkStore, seqStore, presetStore, historyStore);
         VirtualFkPanel        virtualFkPanel = new VirtualFkPanel(virtualFkStore);
         SequenceMappingPanel  seqPanel       = new SequenceMappingPanel(seqStore);
 

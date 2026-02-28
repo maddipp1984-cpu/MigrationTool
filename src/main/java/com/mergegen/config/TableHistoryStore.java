@@ -10,7 +10,7 @@ import java.util.stream.Collectors;
  * Verwaltet den Analyse-Verlauf (zuletzt verwendete Tabellen/Werte).
  *
  * Gespeichert in "table-history.txt" im Arbeitsverzeichnis.
- * Format pro Zeile: TABLE|COLUMN|VAL1;VAL2|CONST1;CONST2|TIMESTAMP
+ * Format pro Zeile: TABLE|COLUMN|VAL1;VAL2|TIMESTAMP
  * Neueste Einträge stehen zuerst.
  */
 public class TableHistoryStore {
@@ -33,8 +33,7 @@ public class TableHistoryStore {
 
     /**
      * Fügt einen Eintrag hinzu oder aktualisiert einen vorhandenen (gleiche Tabelle,
-     * Spalte und Werte). Bei Duplikat wird der Timestamp aktualisiert, vorhandene
-     * Konstantentabellen übernommen (falls im neuen Eintrag leer) und der Eintrag
+     * Spalte und Werte). Bei Duplikat wird der Timestamp aktualisiert und der Eintrag
      * an den Anfang der Liste verschoben.
      */
     public void addOrUpdate(TableHistoryEntry entry) {
@@ -43,11 +42,6 @@ public class TableHistoryStore {
         if (existing.isPresent()) {
             TableHistoryEntry e = existing.get();
             e.setTimestamp(entry.getTimestamp());
-            // Konstantentabellen aus neuem Eintrag übernehmen, falls nicht leer
-            if (!entry.getConstantTables().isEmpty()) {
-                e.setConstantTables(entry.getConstantTables());
-            }
-            // an Anfang schieben
             entries.remove(e);
             entries.add(0, e);
         } else {
@@ -69,15 +63,12 @@ public class TableHistoryStore {
 
     /**
      * Aktualisiert einen bestehenden Eintrag (Werte + Timestamp), schiebt ihn an den
-     * Listenanfang und speichert. Konstantentabellen des alten Eintrags bleiben erhalten.
-     * Wird verwendet, wenn der Nutzer einen selektierten Eintrag mit neuen Werten analysiert.
+     * Listenanfang und speichert.
      */
     public void updateEntry(TableHistoryEntry oldEntry, String table, String column,
                             List<String> newValues) {
         entries.remove(oldEntry);
-        TableHistoryEntry updated = new TableHistoryEntry(
-            table, column, newValues, oldEntry.getConstantTables());
-        entries.add(0, updated);
+        entries.add(0, new TableHistoryEntry(table, column, newValues));
         save();
     }
 
@@ -99,17 +90,16 @@ public class TableHistoryStore {
             .findFirst();
     }
 
-    /** Schreibt alle Einträge sofort in die Datei. Dient für externe Aktualisierungen. */
+    /** Schreibt alle Einträge sofort in die Datei. */
     public void save() {
         try (PrintWriter writer = new PrintWriter(new FileWriter(filePath))) {
             writer.println("# Analyse-Verlauf");
-            writer.println("# Format: TABLE|COLUMN|VAL1;VAL2|CONST1;CONST2|TIMESTAMP");
+            writer.println("# Format: TABLE|COLUMN|VAL1;VAL2|TIMESTAMP");
             for (TableHistoryEntry e : entries) {
                 writer.println(
-                    e.getTable()                          + SEP +
-                    e.getColumn()                         + SEP +
-                    joinList(e.getValues())               + SEP +
-                    joinList(e.getConstantTables())       + SEP +
+                    e.getTable()          + SEP +
+                    e.getColumn()         + SEP +
+                    joinList(e.getValues()) + SEP +
                     e.getTimestamp()
                 );
             }
@@ -127,15 +117,18 @@ public class TableHistoryStore {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith("#")) continue;
                 String[] parts = line.split("\\|", -1);
-                if (parts.length != 5) continue;
-                String       table          = parts[0].trim();
-                String       column         = parts[1].trim();
-                List<String> values         = splitList(parts[2]);
-                List<String> constantTables = splitList(parts[3]);
-                long         timestamp;
-                try { timestamp = Long.parseLong(parts[4].trim()); }
-                catch (NumberFormatException ex) { timestamp = 0L; }
-                TableHistoryEntry entry = new TableHistoryEntry(table, column, values, constantTables);
+                if (parts.length < 4) continue;
+                String       table  = parts[0].trim();
+                String       column = parts[1].trim();
+                List<String> values = splitList(parts[2]);
+                // parts[3] kann Timestamp oder (altes Format) Konstantentabellen sein
+                long timestamp;
+                try {
+                    timestamp = Long.parseLong(parts[parts.length - 1].trim());
+                } catch (NumberFormatException ex) {
+                    timestamp = 0L;
+                }
+                TableHistoryEntry entry = new TableHistoryEntry(table, column, values);
                 entry.setTimestamp(timestamp);
                 entries.add(entry);
             }

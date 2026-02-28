@@ -79,6 +79,8 @@ public class TraversalService {
         Map<String, List<ForeignKeyRelation>> fkRelations = new HashMap<>();
 
         DependencyNode rootNode = new DependencyNode(rootTable, lookupColumn, rootValueLiteral, 1);
+        String rootLabel = extractLabel(rootRow, pkCols);
+        if (rootLabel != null) rootNode.addRowLabel(rootLabel);
 
         // Queue-Einträge: [Tabellenname, PK-Literal (erster PK), TableRow-Objekt, DependencyNode]
         Queue<Object[]> queue = new ArrayDeque<>();
@@ -141,12 +143,18 @@ public class TraversalService {
                     rel.getChildTable(), rel.getFkColumn(), currentPkValue, childRows.size());
                 node.addChild(childNode);
 
-                for (TableRow childRow : childRows) {
-                    List<String> childPkCols = analyzer.getPrimaryKeyColumns(rel.getChildTable());
-                    // Fallback auf FK-Spalte, wenn kein PK definiert ist
-                    String childPkCol   = childPkCols.isEmpty() ? rel.getFkColumn() : childPkCols.get(0);
-                    String childPkValue = childRow.getPkRawValue(childPkCol);
+                // PK-Spalten einmal ermitteln (gilt für alle Zeilen dieser Tabelle)
+                List<String> childPkCols = analyzer.getPrimaryKeyColumns(rel.getChildTable());
+                String childPkCol = childPkCols.isEmpty() ? rel.getFkColumn() : childPkCols.get(0);
 
+                // Labels: ersten lesbaren String-Wert jeder Zeile für die Baum-Anzeige
+                for (TableRow childRow : childRows) {
+                    String label = extractLabel(childRow, childPkCols);
+                    if (label != null) childNode.addRowLabel(label);
+                }
+
+                for (TableRow childRow : childRows) {
+                    String childPkValue = childRow.getPkRawValue(childPkCol);
                     String childKey = buildVisitedKey(rel.getChildTable(), childRow,
                         childPkCols, childPkValue);
                     if (!visited.contains(childKey)) {
@@ -196,6 +204,24 @@ public class TraversalService {
      *   "ORD-0001" → 'ORD-0001'
      *   "O'Brien"  → 'O''Brien'
      */
+    /**
+     * Extrahiert den ersten lesbaren String-Wert einer Zeile für die Baum-Anzeige.
+     * Überspringt PK-Spalten, NULL-Werte und numerische Literale.
+     * String-Literale werden ohne umschließende Hochkommata zurückgegeben.
+     */
+    private String extractLabel(TableRow row, List<String> pkCols) {
+        Set<String> pkSet = new HashSet<>(pkCols);
+        for (Map.Entry<String, String> entry : row.getValues().entrySet()) {
+            if (pkSet.contains(entry.getKey())) continue;
+            String val = entry.getValue();
+            if (val == null || val.equals("NULL")) continue;
+            if (val.startsWith("'") && val.endsWith("'") && val.length() > 2) {
+                return val.substring(1, val.length() - 1);
+            }
+        }
+        return null;
+    }
+
     public static String toSqlLiteral(String value) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("Wert darf nicht leer sein.");

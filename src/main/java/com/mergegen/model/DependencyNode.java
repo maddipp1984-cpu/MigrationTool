@@ -10,7 +10,8 @@ public class DependencyNode {
     private final String pkColumn;
     private final String pkValue;
     private final int rowCount;
-    private final List<DependencyNode> children = new ArrayList<>();
+    private final List<DependencyNode> children  = new ArrayList<>();
+    private final List<String>         rowLabels = new ArrayList<>();
 
     public DependencyNode(String tableName, String pkColumn, String pkValue, int rowCount) {
         this.tableName = tableName;
@@ -19,7 +20,9 @@ public class DependencyNode {
         this.rowCount  = rowCount;
     }
 
-    public void addChild(DependencyNode child) { children.add(child); }
+    public void addChild(DependencyNode child)   { children.add(child); }
+    public void addRowLabel(String label)        { rowLabels.add(label); }
+    public List<String> getRowLabels()           { return rowLabels; }
 
     public String getTableName()       { return tableName; }
     public String getPkColumn()        { return pkColumn; }
@@ -29,6 +32,11 @@ public class DependencyNode {
 
     @Override
     public String toString() {
-        return tableName + "  (" + rowCount + " Datensatz" + (rowCount != 1 ? "e" : "") + ")";
+        String base = tableName + "  (" + rowCount + " Datensatz" + (rowCount != 1 ? "e" : "") + ")";
+        if (rowLabels.isEmpty()) return base;
+        List<String> display = rowLabels.size() > 3 ? rowLabels.subList(0, 3) : rowLabels;
+        String suffix = String.join(", ", display);
+        if (rowLabels.size() > 3) suffix += ", …";
+        return base + "  –  " + suffix;
     }
 }

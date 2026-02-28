@@ -56,7 +56,7 @@ public class DatabaseConfig {
         }
 
         String user     = requireProperty(props, "db.user");
-        String password  = requireProperty(props, "db.password");
+        String password  = props.getProperty("db.password", "");
         String schema    = requireProperty(props, "db.schema");
         return new DatabaseConfig(host, port, sid, user, password, schema.toUpperCase());
     }

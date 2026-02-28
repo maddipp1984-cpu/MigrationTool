@@ -41,7 +41,10 @@ public class TraversalResult {
         Set<String> seen = new HashSet<>();
 
         for (TraversalResult r : results) {
-            mergedRoot.addChild(r.getRootNode());
+            DependencyNode childRoot = r.getRootNode();
+            mergedRoot.addChild(childRoot);
+            // Label des Kind-Knotens (z.B. "Steven") auch am BATCH-Knoten anzeigen
+            childRoot.getRowLabels().forEach(mergedRoot::addRowLabel);
             for (TableRow row : r.getOrderedRows()) {
                 String key = row.getSchema() + "." + row.getTableName() + "#" + row.getValues().toString();
                 if (seen.add(key)) {

@@ -2,7 +2,6 @@ package com.mergegen.gui;
 
 import com.mergegen.analyzer.SchemaAnalyzer;
 import com.mergegen.config.AppSettings;
-import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.TableHistoryStore;
@@ -78,7 +77,6 @@ public class GeneratorPanel extends JPanel {
     private final AppSettings  appSettings  = new AppSettings();
     private final VirtualFkStore virtualFkStore;
     private final SequenceMappingStore seqStore;
-    private final ConstantTableStore constantTableStore;
     private final QueryPresetStore presetStore;
     private final TableHistoryStore historyStore;
 
@@ -92,19 +90,14 @@ public class GeneratorPanel extends JPanel {
     private final JButton           deletePresetBtn = new JButton("Löschen");
     private final JButton           savePresetBtn   = new JButton("Als Preset speichern");
 
-    // Checkbox-Panel für Konstantentabellen (wird in showTreeCard() befüllt)
-    private final JPanel constantCheckboxPanel = new JPanel(new GridLayout(0, 1));
-    // Wrapper-Panel für den gesamten Konstantentabellen-Bereich (zum Ein-/Ausblenden)
-    private JPanel constantSection;
 
     public GeneratorPanel(SettingsPanel settingsPanel, VirtualFkStore virtualFkStore,
-                          SequenceMappingStore seqStore, ConstantTableStore constantTableStore,
-                          QueryPresetStore presetStore, TableHistoryStore historyStore) {
-        this.settingsPanel       = settingsPanel;
-        this.virtualFkStore      = virtualFkStore;
-        this.seqStore            = seqStore;
-        this.constantTableStore  = constantTableStore;
-        this.presetStore         = presetStore;
+                          SequenceMappingStore seqStore, QueryPresetStore presetStore,
+                          TableHistoryStore historyStore) {
+        this.settingsPanel  = settingsPanel;
+        this.virtualFkStore = virtualFkStore;
+        this.seqStore       = seqStore;
+        this.presetStore    = presetStore;
         this.historyStore        = historyStore;
         setLayout(new BorderLayout());
         // Alle drei Karten registrieren; sichtbar ist anfangs nur CARD_INPUT
@@ -145,11 +138,6 @@ public class GeneratorPanel extends JPanel {
                 tableField.setText(preset.getTable());
                 columnField.setText(preset.getColumn());
                 valueArea.setText(String.join("\n", preset.getValues()));
-                // Konstantentabellen-Store mit Preset-Stand überschreiben
-                constantTableStore.clear();
-                for (String ct : preset.getConstantTables()) {
-                    constantTableStore.add(ct);
-                }
             });
         });
 
@@ -215,7 +203,7 @@ public class GeneratorPanel extends JPanel {
         btnRow.insets    = new Insets(16, 0, 4, 0);
         p.add(analyzeBtn, btnRow);
 
-        GridBagConstraints statusRow = gbc(0, 6, GridBagConstraints.WEST);
+        GridBagConstraints statusRow = gbc(0, 7, GridBagConstraints.WEST);
         statusRow.gridwidth = 2;
         inputStatus.setForeground(Color.RED);
         p.add(inputStatus, statusRow);
@@ -233,9 +221,6 @@ public class GeneratorPanel extends JPanel {
             tableField.setText(selected.getTable());
             columnField.setText(selected.getColumn());
             valueArea.setText(String.join("\n", selected.getValues()));
-            // Konstantentabellen-Store ersetzen
-            constantTableStore.clear();
-            selected.getConstantTables().forEach(constantTableStore::add);
             // Aktiven Eintrag merken – bei erneuter Analyse wird dieser aktualisiert
             activeHistoryEntry = selected;
         });
@@ -302,6 +287,9 @@ public class GeneratorPanel extends JPanel {
      * Ergebnisse anschließend mit TraversalResult.merge() zusammengeführt.
      */
     private void startAnalysis() {
+        // Passwort-Check: falls leer, Dialog zur Profil-Auswahl anzeigen
+        if (!settingsPanel.isPasswordSet() && !showPasswordDialog()) return;
+
         String table  = tableField.getText().trim().toUpperCase();
         String column = columnField.getText().trim().toUpperCase();
 
@@ -362,8 +350,7 @@ public class GeneratorPanel extends JPanel {
                             && activeHistoryEntry.getColumn().equalsIgnoreCase(column)) {
                         historyStore.updateEntry(activeHistoryEntry, table, column, values);
                     } else {
-                        historyStore.addOrUpdate(new TableHistoryEntry(
-                            table, column, values, Collections.emptyList()));
+                        historyStore.addOrUpdate(new TableHistoryEntry(table, column, values));
                     }
                     activeHistoryEntry = null;
                     refreshHistoryList();
@@ -387,41 +374,19 @@ public class GeneratorPanel extends JPanel {
         p.add(treeInfo, BorderLayout.NORTH);
 
         depTree.setRootVisible(true);
+        javax.swing.tree.DefaultTreeCellRenderer renderer = new javax.swing.tree.DefaultTreeCellRenderer();
+        renderer.setLeafIcon(renderer.getClosedIcon());
+        depTree.setCellRenderer(renderer);
+
         JScrollPane scroll = new JScrollPane(depTree);
         scroll.setPreferredSize(new Dimension(500, 300));
         p.add(scroll, BorderLayout.CENTER);
 
-        // Südbereich: Konstantentabellen-Sektion + Buttons
-        JPanel south = new JPanel();
-        south.setLayout(new BoxLayout(south, BoxLayout.PAGE_AXIS));
-
-        // Konstantentabellen-Bereich
-        constantSection = new JPanel(new BorderLayout(0, 4));
-        constantSection.setBorder(javax.swing.BorderFactory.createTitledBorder("Konstantentabellen"));
-
-        JLabel hint = new JLabel("<html><font color='gray' size='3'>" +
-            "Angehakte Tabellen haben fixe Primary Keys und existieren bereits in der Zieldatenbank.<br>" +
-            "Für diese Tabellen wird kein MERGE-Statement erzeugt – der FK-Wert wird direkt übernommen." +
-            "</font></html>");
-        hint.setBorder(new EmptyBorder(0, 4, 4, 4));
-        constantSection.add(hint, BorderLayout.NORTH);
-
-        JScrollPane cbScroll = new JScrollPane(constantCheckboxPanel);
-        cbScroll.setMaximumSize(new Dimension(Integer.MAX_VALUE, 110));
-        cbScroll.setPreferredSize(new Dimension(500, 110));
-        cbScroll.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
-        constantSection.add(cbScroll, BorderLayout.CENTER);
-
-        south.add(constantSection);
-
-        // Button-Zeile
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         buttons.add(backBtn);
         buttons.add(savePresetBtn);
         buttons.add(generateBtn);
-        south.add(buttons);
-
-        p.add(south, BorderLayout.SOUTH);
+        p.add(buttons, BorderLayout.SOUTH);
 
         backBtn.addActionListener(e -> cards.show(cardPane, CARD_INPUT));
         generateBtn.addActionListener(e -> startGeneration());
@@ -432,15 +397,7 @@ public class GeneratorPanel extends JPanel {
 
     /** Speichert die aktuelle Abfrage als benanntes Preset. */
     private void saveCurrentPreset() {
-        // 1. Aktuellen Checkbox-Stand (selectedConstants) lesen
-        List<String> selectedConstants = new ArrayList<>();
-        for (Component c : constantCheckboxPanel.getComponents()) {
-            if (c instanceof JCheckBox && ((JCheckBox) c).isSelected()) {
-                selectedConstants.add(c.getName());
-            }
-        }
-
-        // 2. Vorschlag = aktuell gewählter Preset-Name (falls "(kein Preset)" → leer)
+        // 1. Vorschlag = aktuell gewählter Preset-Name (falls "(kein Preset)" → leer)
         String currentPreset = (String) presetCombo.getSelectedItem();
         String suggestion = (currentPreset != null && !currentPreset.equals("(kein Preset)"))
             ? currentPreset : "";
@@ -480,7 +437,7 @@ public class GeneratorPanel extends JPanel {
             .filter(s -> !s.isEmpty())
             .collect(Collectors.toList());
 
-        presetStore.add(new QueryPreset(finalName, table, column, values, selectedConstants));
+        presetStore.add(new QueryPreset(finalName, table, column, values));
 
         // 6. Combo aktualisieren und neues Preset auswählen
         refreshPresetCombo();
@@ -502,22 +459,6 @@ public class GeneratorPanel extends JPanel {
         treeInfo.setText("Gefunden: " + total + " Datensatz" + (total != 1 ? "e" : "")
                 + " in " + counts.size() + " Tabelle" + (counts.size() != 1 ? "n" : ""));
 
-        // Checkbox-Liste neu aufbauen (Root-Tabelle überspringen)
-        constantCheckboxPanel.removeAll();
-        boolean first = true;
-        for (String tbl : counts.keySet()) {
-            if (first) { first = false; continue; }  // Root-Tabelle überspringen
-            JCheckBox cb = new JCheckBox(tbl, constantTableStore.isConstant(tbl));
-            cb.setName(tbl);
-            cb.setToolTipText("Häkchen = Stammdatentabelle mit festen PKs, " +
-                              "kein MERGE-Statement wird erzeugt");
-            constantCheckboxPanel.add(cb);
-        }
-        constantCheckboxPanel.revalidate();
-
-        // Sektion ausblenden, wenn keine abhängigen Tabellen vorhanden
-        constantSection.setVisible(constantCheckboxPanel.getComponentCount() > 0);
-
         cards.show(cardPane, CARD_TREE);
     }
 
@@ -528,7 +469,7 @@ public class GeneratorPanel extends JPanel {
     private DefaultMutableTreeNode buildTreeNodes(DependencyNode node) {
         DefaultMutableTreeNode treeNode = new DefaultMutableTreeNode(node.toString());
         for (DependencyNode child : node.getChildren()) {
-            treeNode.add(buildTreeNodes(child));  // rekursiv für alle Ebenen
+            treeNode.add(buildTreeNodes(child));
         }
         return treeNode;
     }
@@ -590,42 +531,20 @@ public class GeneratorPanel extends JPanel {
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
             : "";
 
-        // 1. Checkbox-Zustand in Store speichern
-        List<String> selectedConstants = new ArrayList<>();
-        for (Component c : constantCheckboxPanel.getComponents()) {
-            if (c instanceof JCheckBox) {
-                JCheckBox cb = (JCheckBox) c;
-                if (cb.isSelected()) { constantTableStore.add(cb.getName()); selectedConstants.add(cb.getName()); }
-                else                   constantTableStore.remove(cb.getName());
-            }
-        }
+        List<TableRow> filteredRows = new ArrayList<>(lastResult.getOrderedRows());
 
-        // Verlaufseintrag mit Konstantentabellen aktualisieren
-        historyStore.findMatch(lastTable, lastColumn, lastIds).ifPresent(entry -> {
-            entry.setConstantTables(selectedConstants);
-            historyStore.save();
-        });
-        refreshHistoryList();
-
-        // 2. Konstantentabellen aus orderedRows herausfiltern
-        List<TableRow> filteredRows = lastResult.getOrderedRows().stream()
-            .filter(r -> !constantTableStore.isConstant(r.getTableName()))
-            .collect(Collectors.toList());
-
-        // Counts aus den gefilterten Zeilen neu berechnen (Konstantentabellen ausgeschlossen)
         Map<String, Integer> filteredCounts = new LinkedHashMap<>();
         for (TableRow row : filteredRows) {
             filteredCounts.merge(row.getTableName(), 1, Integer::sum);
         }
 
-        // 3. Eindeutige Tabellen mit ihren PK-Spalten sammeln (nur gefilterte)
-        Map<String, List<String>> tablePkMap = new LinkedHashMap<>();
+        // 3. Eindeutige Tabellen mit ihren PK-ColumnInfos sammeln (nur gefilterte)
+        Map<String, List<ColumnInfo>> tablePkMap = new LinkedHashMap<>();
         for (TableRow row : filteredRows) {
             String tbl = row.getTableName();
             if (!tablePkMap.containsKey(tbl)) {
-                List<String> pkCols = row.getColumns().values().stream()
+                List<ColumnInfo> pkCols = row.getColumns().values().stream()
                     .filter(ColumnInfo::isPrimaryKey)
-                    .map(ColumnInfo::getName)
                     .collect(Collectors.toList());
                 tablePkMap.put(tbl, pkCols);
             }
@@ -646,11 +565,24 @@ public class GeneratorPanel extends JPanel {
         }
 
         try {
-            for (Map.Entry<String, List<String>> entry : tablePkMap.entrySet()) {
+            for (Map.Entry<String, List<ColumnInfo>> entry : tablePkMap.entrySet()) {
                 String tbl = entry.getKey();
-                List<String> pkCols = entry.getValue();
+                List<ColumnInfo> pkCols = entry.getValue();
 
-                for (String pkCol : pkCols) {
+                for (ColumnInfo pkColInfo : pkCols) {
+                    String pkCol = pkColInfo.getName();
+
+                    // FK-Spalte → Wert kommt vom Parent, nie eine Sequence
+                    boolean isFkColumn = lastResult.getFkRelations().values().stream()
+                        .flatMap(List::stream)
+                        .anyMatch(fk -> fk.getChildTable().equalsIgnoreCase(tbl)
+                                     && fk.getFkColumn().equalsIgnoreCase(pkCol));
+                    if (isFkColumn) continue;
+
+                    // Datum/Timestamp → kein Sequence-Kandidat
+                    String dataType = pkColInfo.getDataType().toUpperCase();
+                    if (dataType.equals("DATE") || dataType.startsWith("TIMESTAMP")) continue;
+
                     String key = tbl + "." + pkCol;
 
                     // Dreistufige Vorschlags-Logik
@@ -758,6 +690,66 @@ public class GeneratorPanel extends JPanel {
         historyList.setModel(model);
     }
 
+    /**
+     * Zeigt einen Dialog zur Profil-Auswahl und Passwort-Eingabe.
+     * Gibt true zurück wenn der User bestätigt hat, false bei Abbruch.
+     */
+    private boolean showPasswordDialog() {
+        List<String> profiles = settingsPanel.getProfileNames();
+
+        JComboBox<String> profileCombo = new JComboBox<>();
+        if (profiles.isEmpty()) {
+            profileCombo.addItem("(kein Profil gespeichert)");
+            profileCombo.setEnabled(false);
+        } else {
+            profiles.forEach(profileCombo::addItem);
+        }
+
+        JPasswordField pwField = new JPasswordField(20);
+
+        JPanel panel = new JPanel(new GridBagLayout());
+        GridBagConstraints lbl = new GridBagConstraints();
+        lbl.anchor = GridBagConstraints.WEST;
+        lbl.insets = new Insets(6, 4, 6, 8);
+        lbl.gridx = 0;
+        GridBagConstraints fld = new GridBagConstraints();
+        fld.fill   = GridBagConstraints.HORIZONTAL;
+        fld.weightx = 1.0;
+        fld.insets = new Insets(6, 0, 6, 4);
+        fld.gridx  = 1;
+
+        lbl.gridy = 0; fld.gridy = 0;
+        panel.add(new JLabel("Verbindungsprofil:"), lbl);
+        panel.add(profileCombo, fld);
+
+        lbl.gridy = 1; fld.gridy = 1;
+        panel.add(new JLabel("Passwort:"), lbl);
+        panel.add(pwField, fld);
+
+        // Fokus direkt ins Passwortfeld
+        SwingUtilities.invokeLater(pwField::requestFocusInWindow);
+
+        int result = JOptionPane.showConfirmDialog(
+            this, panel, "Datenbankverbindung",
+            JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
+
+        if (result != JOptionPane.OK_OPTION) return false;
+        if (pwField.getPassword().length == 0) {
+            setInputStatus("Bitte Passwort eingeben.");
+            return false;
+        }
+
+        String selected = (String) profileCombo.getSelectedItem();
+        if (selected != null && profileCombo.isEnabled()) {
+            settingsPanel.applyProfileWithPassword(selected, pwField.getPassword());
+        } else {
+            // Kein Profil – nur Passwort setzen nicht möglich ohne Verbindungsdaten
+            setInputStatus("Bitte zuerst ein Verbindungsprofil unter DB-Verbindung anlegen.");
+            return false;
+        }
+        return true;
+    }
+
     private void setInputStatus(String msg) {
         inputStatus.setText(msg);
     }
@@ -839,10 +831,7 @@ public class GeneratorPanel extends JPanel {
      * Verwendet ausschließlich gespeicherte Sequence-Mappings aus dem Store.
      */
     private void executeGenerationAuto(Consumer<Boolean> onComplete) {
-        // Konstantentabellen aus Store (nicht aus Checkbox-UI)
-        List<TableRow> filteredRows = lastResult.getOrderedRows().stream()
-            .filter(r -> !constantTableStore.isConstant(r.getTableName()))
-            .collect(Collectors.toList());
+        List<TableRow> filteredRows = new ArrayList<>(lastResult.getOrderedRows());
 
         Map<String, Integer> filteredCounts = new LinkedHashMap<>();
         for (TableRow row : filteredRows) filteredCounts.merge(row.getTableName(), 1, Integer::sum);
@@ -904,4 +893,5 @@ public class GeneratorPanel extends JPanel {
         c.insets = new Insets(6, 4, 6, 4);
         return c;
     }
+
 }

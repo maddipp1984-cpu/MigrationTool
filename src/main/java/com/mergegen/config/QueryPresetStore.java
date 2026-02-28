@@ -14,16 +14,15 @@ import java.util.stream.Collectors;
  * Verwaltet gespeicherte Abfrage-Presets.
  *
  * Gespeichert in "query-presets.txt" im Arbeitsverzeichnis.
- * Format pro Zeile: NAME|TABLE|COLUMN|VALUE1;VALUE2|CONST1;CONST2
- * Leere Liste → leerer String zwischen den |
+ * Format pro Zeile: NAME|TABLE|COLUMN|VALUE1;VALUE2
  * Zeilen, die mit '#' beginnen, werden als Kommentare ignoriert.
  */
 public class QueryPresetStore {
 
-    private static final String FILE_NAME  = "query-presets.txt";
-    private static final String SEP        = "|";
-    private static final String LIST_SEP   = ";";
-    private static final String COMMENT    = "#";
+    private static final String FILE_NAME = "query-presets.txt";
+    private static final String SEP       = "|";
+    private static final String LIST_SEP  = ";";
+    private static final String COMMENT   = "#";
 
     private final List<QueryPreset> entries = new ArrayList<>();
 
@@ -64,13 +63,12 @@ public class QueryPresetStore {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith(COMMENT)) continue;
                 String[] parts = line.split("\\|", -1);
-                if (parts.length != 5) continue;
-                String       name           = parts[0].trim();
-                String       table          = parts[1].trim();
-                String       column         = parts[2].trim();
-                List<String> values         = splitList(parts[3]);
-                List<String> constantTables = splitList(parts[4]);
-                entries.add(new QueryPreset(name, table, column, values, constantTables));
+                if (parts.length < 4) continue;
+                String       name   = parts[0].trim();
+                String       table  = parts[1].trim();
+                String       column = parts[2].trim();
+                List<String> values = splitList(parts[3]);
+                entries.add(new QueryPreset(name, table, column, values));
             }
         } catch (IOException ex) {
             System.err.println("query-presets.txt konnte nicht geladen werden: " + ex.getMessage());
@@ -80,14 +78,13 @@ public class QueryPresetStore {
     private void save() {
         try (PrintWriter writer = new PrintWriter(new FileWriter(FILE_NAME))) {
             writer.println("# Gespeicherte Abfrage-Presets");
-            writer.println("# Format: NAME|TABLE|COLUMN|VALUE1;VALUE2|CONST1;CONST2");
+            writer.println("# Format: NAME|TABLE|COLUMN|VALUE1;VALUE2");
             for (QueryPreset p : entries) {
                 writer.println(
-                    p.getName()                           + SEP +
-                    p.getTable()                          + SEP +
-                    p.getColumn()                         + SEP +
-                    joinList(p.getValues())               + SEP +
-                    joinList(p.getConstantTables())
+                    p.getName()             + SEP +
+                    p.getTable()            + SEP +
+                    p.getColumn()           + SEP +
+                    joinList(p.getValues())
                 );
             }
         } catch (IOException ex) {

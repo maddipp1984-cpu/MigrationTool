@@ -347,9 +347,31 @@ public class SettingsPanel extends JPanel {
         return p;
     }
 
+    /** Gibt zurück ob ein Passwort im Formular eingetragen ist. */
+    public boolean isPasswordSet() {
+        return passwordField.getPassword().length > 0;
+    }
+
+    /** Gibt alle gespeicherten Profilnamen zurück. */
+    public List<String> getProfileNames() {
+        return profileManager.listProfiles();
+    }
+
+    /**
+     * Lädt ein Profil in das Formular und setzt das Passwort.
+     * Wird aufgerufen wenn der User über den Passwort-Dialog ein Profil wählt.
+     */
+    public void applyProfileWithPassword(String profileName, char[] password) {
+        profileCombo.setSelectedItem(profileName);
+        loadSelectedProfile();
+        passwordField.setText(new String(password));
+    }
+
     /** Für den Generator-Tab: liefert die aktuelle DB-Konfiguration aus den Feldern. */
     public DatabaseConfig getCurrentConfig() {
-        return DatabaseConfig.fromProperties(buildProperties());
+        Properties p = buildProperties();
+        p.setProperty("db.password", new String(passwordField.getPassword()));
+        return DatabaseConfig.fromProperties(p);
     }
 
     /** Für den Generator-Tab: liefert das gewählte Ausgabeverzeichnis. */

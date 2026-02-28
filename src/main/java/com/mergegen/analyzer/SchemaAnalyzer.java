@@ -6,6 +6,7 @@ import com.mergegen.model.ForeignKeyRelation;
 import com.mergegen.model.TableRow;
 
 import java.sql.*;
+import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -243,9 +244,9 @@ public class SchemaAnalyzer {
                 // Oracle DATE enthält Uhrzeit – daher Timestamp-Lesen statt Date
                 Timestamp ts = rs.getTimestamp(colName);
                 if (ts == null) return "NULL";
-                // toLocalDateTime().toString() liefert "2024-01-15T10:30:00" → T durch Leerzeichen ersetzen
-                return "TO_DATE('" + ts.toLocalDateTime().toString().replace("T", " ")
-                       .substring(0, 19) + "', 'YYYY-MM-DD HH24:MI:SS')";
+                String fmt = ts.toLocalDateTime()
+                               .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                return "TO_DATE('" + fmt + "', 'YYYY-MM-DD HH24:MI:SS')";
             }
 
             case "TIMESTAMP":
@@ -253,8 +254,9 @@ public class SchemaAnalyzer {
             case "TIMESTAMP(3)": {
                 Timestamp ts = rs.getTimestamp(colName);
                 if (ts == null) return "NULL";
-                return "TO_TIMESTAMP('" + ts.toLocalDateTime().toString().replace("T", " ")
-                       .substring(0, 19) + "', 'YYYY-MM-DD HH24:MI:SS')";
+                String fmt = ts.toLocalDateTime()
+                               .format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"));
+                return "TO_TIMESTAMP('" + fmt + "', 'YYYY-MM-DD HH24:MI:SS')";
             }
 
             case "CLOB":
