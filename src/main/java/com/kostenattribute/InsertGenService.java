@@ -55,7 +55,7 @@ public class InsertGenService {
                 } else if (line.startsWith("#FK=")) {
                     String fkDef = line.substring(4);
                     int sep = fkDef.indexOf('|');
-                    if (sep > 0) fkSubselects.put(fkDef.substring(0, sep), fkDef.substring(sep + 1));
+                    if (sep > 0) fkSubselects.put(fkDef.substring(0, sep), fkDef.substring(sep + 1).replace("\\n", "\n"));
                 } else if (!line.startsWith("#") && !line.isBlank()) {
                     headerLine = line;
                     break;
@@ -99,7 +99,7 @@ public class InsertGenService {
             }
             if (fkSubselects != null) {
                 for (Map.Entry<String, String> entry : fkSubselects.entrySet()) {
-                    bw.write("#FK=" + entry.getKey() + "|" + entry.getValue());
+                    bw.write("#FK=" + entry.getKey() + "|" + entry.getValue().replace("\n", "\\n").replace("\r", ""));
                     bw.newLine();
                 }
             }
@@ -193,10 +193,13 @@ public class InsertGenService {
             String colList = String.join(", ", columnOrder);
             sb.append("INSERT INTO ").append(tableName)
               .append(" (").append(colList).append(")\n")
-              .append("SELECT ").append(String.join(", ", selectValues)).append(" FROM DUAL\n")
-              .append("WHERE NOT EXISTS (SELECT 1 FROM ").append(tableName)
-              .append(" WHERE ").append(String.join(" AND ", whereConditions))
-              .append(");\n\n");
+              .append("SELECT ").append(String.join(", ", selectValues)).append(" FROM DUAL\n");
+            if (!whereConditions.isEmpty()) {
+                sb.append("WHERE NOT EXISTS (SELECT 1 FROM ").append(tableName)
+                  .append(" WHERE ").append(String.join(" AND ", whereConditions))
+                  .append(")");
+            }
+            sb.append(";\n\n");
             insertCount++;
         }
         sb.append("\nCOMMIT;\n");

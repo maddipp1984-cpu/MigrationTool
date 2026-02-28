@@ -287,6 +287,7 @@ public class InsertGenPanel extends JPanel {
                     "Spalte \"" + colName + "\" l\u00F6schen?", "Best\u00E4tigen",
                     JOptionPane.YES_NO_OPTION);
             if (confirm != JOptionPane.YES_OPTION) return;
+            fkSubselects.remove(colName);
             int modelCol = table.convertColumnIndexToModel(selectedViewCol[0]);
             removeColumn(modelCol);
             selectedViewCol[0] = -1;
@@ -550,7 +551,13 @@ public class InsertGenPanel extends JPanel {
                 "Neuer Spaltenname:", "Spalte umbenennen",
                 JOptionPane.PLAIN_MESSAGE, null, null, current);
         if (newName == null || newName.isBlank() || newName.equals(current)) return;
-        table.getColumnModel().getColumn(viewCol).setHeaderValue(newName.trim());
+        String trimmed = newName.trim();
+        table.getColumnModel().getColumn(viewCol).setHeaderValue(trimmed);
+        // FK-Subselect unter neuem Key speichern
+        String fk = fkSubselects.remove(current);
+        if (fk != null) fkSubselects.put(trimmed, fk);
+        // PK-Combo aktualisieren
+        refreshPkCombo();
         table.getTableHeader().repaint();
         markDirty();
     }
@@ -569,7 +576,7 @@ public class InsertGenPanel extends JPanel {
         JPanel panel = new JPanel(new BorderLayout(0, 6));
         panel.add(new JLabel("Subselect f\u00FCr Spalte \"" + colName + "\":"), BorderLayout.NORTH);
         panel.add(sp, BorderLayout.CENTER);
-        panel.add(new JLabel("<html>Platzhalter <b>{WERT}</b> wird durch den Zellwert ersetzt.<br>z.B.: (SELECT ID FROM OTHER_TABLE WHERE NAME = '{WERT}')</html>"), BorderLayout.SOUTH);
+        panel.add(new JLabel("<html>Platzhalter <b>{WERT}</b> wird durch den Zellwert ersetzt (automatisch gequotet).<br>z.B.: SELECT ID FROM OTHER_TABLE WHERE NAME = {WERT}</html>"), BorderLayout.SOUTH);
 
         int result = JOptionPane.showConfirmDialog(this, panel,
                 "FK mit Subselect", JOptionPane.OK_CANCEL_OPTION, JOptionPane.PLAIN_MESSAGE);
