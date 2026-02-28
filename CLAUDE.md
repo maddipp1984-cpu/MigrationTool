@@ -1,6 +1,6 @@
 # MigrationTool
 
-Einzelnes Gradle-Projekt, das **MergeGen** (Oracle MERGE-Script-Generator) und **ExcelSplit** (Excel-zu-CSV-Konverter) in einem gemeinsamen Release mit geteilter JRE zusammenfasst. Single-Frame-Anwendung mit Seitenleiste – alle Tools werden im selben Fenster angezeigt.
+Einzelnes Gradle-Projekt, das **MergeGen** (Oracle MERGE-Script-Generator), **ExcelSplit** (Excel-zu-CSV-Konverter) und **INSERT Generator** (generischer INSERT-Script-Generator) in einem gemeinsamen Release mit geteilter JRE zusammenfasst. Single-Frame-Anwendung mit Seitenleiste – alle Tools werden im selben Fenster angezeigt.
 
 ## Package-Regeln
 
@@ -30,7 +30,7 @@ MigrationTool/
     │   │   ├── db/              (DatabaseConnection)
     │   │   └── model/           (ColumnInfo, TableRow, DependencyNode, ForeignKeyRelation, SequenceMapping, TraversalResult, QueryPreset, TableHistoryEntry)
     │   ├── com/excelsplit/      (ExcelSplit, AppConfig, ExcelSplitService, MainPresenter, MainWindow)
-    │   ├── com/kostenattribute/ (KostenattributePanel, KostenattributeService)
+    │   ├── com/kostenattribute/ (InsertGenPanel, InsertGenService)
     │   ├── com/migrationtool/scriptexec/ (ScriptExecutorPanel, ScriptExecutorService, ZielDbPanel)
     │   └── com/migrationtool/launcher/  (LauncherApp, WorkflowPanel – NUR diese beiden)
     └── test/java/com/mergegen/  – 50 JUnit-5-Tests (keine DB nötig)
@@ -60,7 +60,7 @@ MigrationTool/
   - `Alles ausführen` → `WorkflowPanel` (immer ganz oben, nicht verschiebbar)
   - Werkzeug-Kategorien (z.B. `Exceltools`, `Mergescripte`) → **per Drag & Drop umsortierbar**
   - `Einstellungen` → `SettingsPanel` (immer ganz unten, nicht verschiebbar)
-- Cards: `workflow` (WorkflowPanel), `mergegen` (JTabbedPane), `excelsplit`, `settings`
+- Cards: `workflow` (WorkflowPanel), `mergegen` (JTabbedPane), `excelsplit`, `insertgen`, `settings`
 - Globale DB-Einstellungen: `SettingsPanel`-Instanz einmalig erstellt, als Card und als Parameter an `GeneratorPanel` übergeben
 - `MainFrame` wird im Launcher nicht verwendet – Panels direkt eingebettet
 
@@ -174,6 +174,44 @@ MigrationTool/
 
 ---
 
+## INSERT Generator – Designentscheidungen
+
+### Überblick
+- Generischer INSERT-Script-Generator für beliebige Oracle-Zieltabellen
+- Package: `com.kostenattribute` (historisch, Klassen: `InsertGenPanel`, `InsertGenService`)
+- Preset-basiert: pro Zieltabelle ein Preset mit Spaltenstruktur + Daten
+
+### Preset-System
+- Jedes Preset als eigene CSV-Datei unter `config/insertgen/<name>.csv`
+- CSV-Format: Metadaten als `#`-Kommentare, dann Header + Datenzeilen
+- Metadaten: `#TABLE=`, `#PK=`, `#SEQUENCE=`, `#FK=SPALTE|subselect`
+- UI: ComboBox + Speichern/Löschen-Buttons (analog MergeGen QueryPresets)
+
+### PK + Sequence (optional)
+- Dropdown für PK-Spalte (befüllt aus aktuellen Spalten)
+- Textfeld für Sequence-Name
+- Header-Markierung: gold + fett
+- Script: `SEQ.NEXTVAL` statt Literalwert, WHERE NOT EXISTS ohne PK-Spalte
+
+### FK-Subselects (optional)
+- Rechtsklick auf Spaltenheader → "FK mit Subselect"
+- Platzhalter `{WERT}` wird pro Zeile durch den Zellwert ersetzt
+- Auto-Typ-Erkennung: Zahlen ohne Quotes, Strings mit Quotes
+- Klammern werden automatisch ergänzt falls nicht vorhanden
+- Header-Markierung: hellblau + kursiv
+
+### Script-Generierung
+- `DELETE FROM <tabelle>` + `INSERT INTO ... SELECT ... FROM DUAL WHERE NOT EXISTS (...)`
+- WHERE NOT EXISTS prüft alle Nicht-PK/Nicht-Sequence-Spalten
+- FK-Spalten: Subselect statt Literalwert
+
+### Clipboard-Paste (Ctrl+V)
+- Leere Tabelle: fragt ob erste Zeile Spaltenüberschrift ist, legt Spalten + Daten an
+- Bestehende Tabelle: fügt ab Cursor-Position ein
+- `KeyboardFocusManager` statt InputMap (CardLayout-kompatibel)
+
+---
+
 ## Laufzeit-Konfigurationsdateien
 
 Abgelegt unter `config/<tool>/` im Arbeitsverzeichnis, kein Registry-Zugriff. Verzeichnisse werden beim ersten Schreiben automatisch angelegt.
@@ -189,8 +227,8 @@ config/
 │   └── table-history.txt        – Analyse-Verlauf
 ├── excelsplit/
 │   └── excel-split.properties   – masterDir, outputDir
-├── kostenattribute/
-│   └── kostenattribute-data.csv – Spaltendefinitionen und Datenzeilen
+├── insertgen/
+│   └── <preset>.csv             – Pro Preset: #TABLE=<name>, Header, Datenzeilen
 └── launcher/
     └── launcher.properties      – nav.order (Kategorie-Reihenfolge im Baum)
 ```

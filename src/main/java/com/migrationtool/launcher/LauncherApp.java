@@ -8,7 +8,7 @@ import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.TableHistoryStore;
 import com.mergegen.config.VirtualFkStore;
-import com.kostenattribute.KostenattributePanel;
+import com.kostenattribute.InsertGenPanel;
 import com.migrationtool.scriptexec.ScriptExecutorPanel;
 import com.migrationtool.scriptexec.ZielDbPanel;
 import com.mergegen.gui.GeneratorPanel;
@@ -129,8 +129,8 @@ public class LauncherApp {
             saveNavOrder(finalStepOrder);
         });
 
-        // ── Kostenattribute-Panel ─────────────────────────────────────────────
-        KostenattributePanel kostenattributePanel = new KostenattributePanel();
+        // ── INSERT-Generator-Panel ───────────────────────────────────────────
+        InsertGenPanel insertGenPanel = new InsertGenPanel();
 
         // ── Content-Bereich (CardLayout) ──────────────────────────────────────
         JPanel contentArea = new JPanel(new CardLayout());
@@ -140,7 +140,7 @@ public class LauncherApp {
         contentArea.add(scriptPanel,          "scriptexec");
         contentArea.add(settingsPanel,        "settings");
         contentArea.add(zielDbPanel,          "zieldb");
-        contentArea.add(kostenattributePanel, "kostenattribute");
+        contentArea.add(insertGenPanel, "insertgen");
 
         // ── Navigationsbaum (statisch, nur zur Navigation) ────────────────────
         JScrollPane treePanel = buildNavTree(contentArea);
@@ -176,7 +176,7 @@ public class LauncherApp {
         DefaultMutableTreeNode excelSplit      = new DefaultMutableTreeNode("Excel Split");
         DefaultMutableTreeNode mergescripte         = new DefaultMutableTreeNode("Mergescripte");
         DefaultMutableTreeNode mergeGen             = new DefaultMutableTreeNode("MERGE Generator");
-        DefaultMutableTreeNode kostenattribute      = new DefaultMutableTreeNode("Kostenattribute (Migration SUEWAG)");
+        DefaultMutableTreeNode insertGen            = new DefaultMutableTreeNode("INSERT Generator");
         DefaultMutableTreeNode scriptAusfuehren = new DefaultMutableTreeNode("Script ausführen");
         DefaultMutableTreeNode zielDbAusfuehren = new DefaultMutableTreeNode("Ziel-DB ausführen");
         DefaultMutableTreeNode einstellungen   = new DefaultMutableTreeNode("Einstellungen");
@@ -185,7 +185,7 @@ public class LauncherApp {
 
         exceltools.add(excelSplit);
         mergescripte.add(mergeGen);
-        mergescripte.add(kostenattribute);
+        mergescripte.add(insertGen);
         scriptAusfuehren.add(zielDbAusfuehren);
         einstellungen.add(dbVerbindung);
         einstellungen.add(zielDbSettings);
@@ -201,7 +201,7 @@ public class LauncherApp {
         nodeCards.put(workflowNode,     "workflow");
         nodeCards.put(excelSplit,       "excelsplit");
         nodeCards.put(mergeGen,         "mergegen");
-        nodeCards.put(kostenattribute,  "kostenattribute");
+        nodeCards.put(insertGen,        "insertgen");
         nodeCards.put(zielDbAusfuehren, "scriptexec");
         nodeCards.put(dbVerbindung,     "settings");
         nodeCards.put(zielDbSettings,   "zieldb");
