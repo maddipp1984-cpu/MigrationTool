@@ -500,11 +500,7 @@ public class GeneratorPanel extends JPanel {
 
         // "Neue Abfrage": Formular leeren, Ergebnis verwerfen, zurück zur Eingabe
         newBtn.addActionListener(e -> {
-            tableField.setText("");
-            columnField.setText("");
-            valueArea.setText("");
-            setInputStatus(" ");
-            lastResult = null;
+            resetInputCard();
             cards.show(cardPane, CARD_INPUT);
         });
 
@@ -679,14 +675,17 @@ public class GeneratorPanel extends JPanel {
 
     // ── Hilfsmethoden ─────────────────────────────────────────────────────────
 
-    /** Leert alle Eingabefelder und setzt Preset- und Verlaufsauswahl zurück. */
+    /** Leert alle Eingabefelder und setzt Preset-, Verlaufs- und Ergebnis-State zurück. */
     private void resetInputCard() {
         tableField.setText("");
         columnField.setText("");
         valueArea.setText("");
+        testModeCheck.setSelected(false);
+        updateCheck.setSelected(false);
         presetCombo.setSelectedIndex(0);
         historyList.clearSelection();
         activeHistoryEntry = null;
+        lastResult = null;
         setInputStatus(" ");
     }
 
