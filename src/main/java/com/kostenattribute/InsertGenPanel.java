@@ -777,7 +777,7 @@ public class InsertGenPanel extends JPanel {
 
         if (result.insertCount == 0) {
             JOptionPane.showMessageDialog(this,
-                    "Keine Daten vorhanden \u2013 Script enth\u00E4lt nur DELETE + COMMIT.",
+                    "Keine Daten vorhanden \u2013 Script enth\u00E4lt nur DELETE.",
                     "Hinweis", JOptionPane.INFORMATION_MESSAGE);
         }
 

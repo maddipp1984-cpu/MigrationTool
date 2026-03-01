@@ -202,7 +202,6 @@ public class InsertGenService {
             sb.append(";\n\n");
             insertCount++;
         }
-        sb.append("\nCOMMIT;\n");
         return new ScriptResult(sb.toString(), insertCount);
     }
 

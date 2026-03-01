@@ -26,7 +26,7 @@ MigrationTool/
     │   │   ├── analyzer/        (SchemaAnalyzer)
     │   │   ├── service/         (TraversalService)
     │   │   ├── generator/       (MergeScriptGenerator, ScriptWriter)
-    │   │   ├── config/          (AppSettings, ConnectionProfileManager, VirtualFkStore, SequenceMappingStore, ConstantTableStore, QueryPresetStore, TableHistoryStore, DatabaseConfig)
+    │   │   ├── config/          (AppSettings, ConnectionProfileManager, VirtualFkStore, SequenceMappingStore, QueryPresetStore, TableHistoryStore, DatabaseConfig)
     │   │   ├── db/              (DatabaseConnection)
     │   │   └── model/           (ColumnInfo, TableRow, DependencyNode, ForeignKeyRelation, SequenceMapping, TraversalResult, QueryPreset, TableHistoryEntry)
     │   ├── com/excelsplit/      (ExcelSplit, AppConfig, ExcelSplitService, MainPresenter, MainWindow)
@@ -92,12 +92,6 @@ MigrationTool/
 - BFS: echte DB-FKs + virtuelle FKs kombiniert
 - **Auto-Bereinigung**: wenn virtueller FK inzwischen als echter Constraint in DB existiert (match auf childTable + fkColumn), wird er beim Traversal automatisch entfernt
 - Shared Instance: in `LauncherApp` erstellt, an `GeneratorPanel` und `VirtualFkPanel` weitergereicht
-
-### Konstantentabellen (`ConstantTableStore`)
-- Datei: `constant-tables.txt`, Format: ein Tabellenname pro Zeile (uppercase)
-- Tabellen mit fixen PKs (Stammdaten), die in der Zieldatenbank bereits existieren
-- UI: Checkbox-Panel im CARD_TREE unterhalb des Abhängigkeitsbaums
-- Beim Generieren: Zeilen der markierten Tabellen aus `orderedRows` gefiltert
 
 ### Analyse-Verlauf (`TableHistoryStore`)
 - Datei: `table-history.txt`, Format: `TABLE|COLUMN|VAL1;VAL2|CONST1;CONST2|TIMESTAMP`
@@ -236,3 +230,20 @@ config/
 ## Nicht in Git
 - `build/`, `.gradle/`
 - `config/` (gesamter Ordner)
+
+---
+
+## Testumgebung (Oracle XE mit Docker)
+- Container: `oracle-xe`, Port 1521, User hr/hr, Schema HR, SID XE
+- Verbindungsprofil: `config/mergegen/connections/HR-local.properties`
+- Testdaten: EMPLOYEES (7), JOB_HISTORY (5), EMPLOYEE_SKILLS (3), SKILL_ENDORSEMENTS (4), EMPLOYEE_CONTRACTS (2), CONTRACT_ITEMS (4)
+- Trigger auf EMPLOYEES und DEPARTMENTS (für Sequence-Edge-Case), EMPLOYEE_SKILLS (mit EMPLOYEE_SKILLS_SEQ)
+- King (employee_id=100) hat Abhängigkeiten in allen Kind-Tabellen → guter Testdatensatz
+- MANAGER_ID ist bei allen Employees NULL (Self-Ref-FK bewusst deaktiviert für Tests)
+
+## Originalprojekte (unberührt)
+- `C:\projekte\MergeGen\` – MergeGen Standalone (Gradle)
+- `C:\projekte\mig_template\` – ExcelSplit Standalone (Maven)
+
+## Entwicklungsregeln
+- **Config-Dateien verschieben, nicht löschen**: Beim Refactoring von Dateipfaden IMMER erst Zielordner anlegen, dann Dateien verschieben (`mv`). Config-Dateien sind nicht in Git → bei Löschung unwiederbringlich verloren.

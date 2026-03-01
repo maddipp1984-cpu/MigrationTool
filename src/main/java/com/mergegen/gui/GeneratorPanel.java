@@ -55,6 +55,7 @@ public class GeneratorPanel extends JPanel {
     private final JCheckBox  testModeCheck   = new JCheckBox("Testmodus (Timestamp-Suffix an Suchspalte)");
     private final JCheckBox  updateCheck     = new JCheckBox("Bei Übereinstimmung aktualisieren (UPDATE)");
     private final JButton    analyzeBtn      = new JButton("Abhängigkeiten analysieren");
+    private final JButton    newInputBtn     = new JButton("Neu");
     private final JLabel     inputStatus     = new JLabel(" ");
 
     // Step 2 – Abhängigkeitsbaum
@@ -105,13 +106,6 @@ public class GeneratorPanel extends JPanel {
         cardPane.add(buildTreeCard(),   CARD_TREE);
         cardPane.add(buildResultCard(), CARD_RESULT);
         add(cardPane, BorderLayout.CENTER);
-        tableField.setText(appSettings.getLastTable());
-        columnField.setText(appSettings.getLastColumn());
-        // Gespeicherte Werte wiederherstellen
-        List<String> savedValues = appSettings.getLastValues();
-        if (!savedValues.isEmpty()) {
-            valueArea.setText(String.join("\n", savedValues));
-        }
         refreshPresetCombo();
         refreshHistoryList();
     }
@@ -126,6 +120,7 @@ public class GeneratorPanel extends JPanel {
         JPanel presetBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 6));
         presetBar.add(new JLabel("Preset:"));
         presetBar.add(presetCombo);
+        presetBar.add(newInputBtn);
         presetBar.add(deletePresetBtn);
         card.add(presetBar, BorderLayout.NORTH);
 
@@ -209,6 +204,7 @@ public class GeneratorPanel extends JPanel {
         p.add(inputStatus, statusRow);
 
         analyzeBtn.addActionListener(e -> startAnalysis());
+        newInputBtn.addActionListener(e -> resetInputCard());
 
         // ── Verlauf-Seitenleiste (WEST im SplitPane) ─────────────────────────
         historyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
@@ -682,6 +678,17 @@ public class GeneratorPanel extends JPanel {
     }
 
     // ── Hilfsmethoden ─────────────────────────────────────────────────────────
+
+    /** Leert alle Eingabefelder und setzt Preset- und Verlaufsauswahl zurück. */
+    private void resetInputCard() {
+        tableField.setText("");
+        columnField.setText("");
+        valueArea.setText("");
+        presetCombo.setSelectedIndex(0);
+        historyList.clearSelection();
+        activeHistoryEntry = null;
+        setInputStatus(" ");
+    }
 
     /** Befüllt die Verlauf-JList neu aus dem Store. */
     private void refreshHistoryList() {
