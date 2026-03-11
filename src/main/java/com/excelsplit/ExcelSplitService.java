@@ -96,6 +96,16 @@ public class ExcelSplitService {
             }
 
             String outName = templateName.endsWith(".csv") ? templateName : templateName + ".csv";
+
+            // Security: Path-Traversal verhindern – nur Dateiname ohne Verzeichnis-Komponenten
+            Path safeName = Path.of(outName).getFileName();
+            if (safeName == null || safeName.toString().contains("..")) {
+                log.accept("  FEHLER: Ungültiger Dateiname im Template: " + outName);
+                logEntries.add("FEHLER " + xlsx.getFileName() + " - ungültiger Template-Name: " + outName);
+                return;
+            }
+            outName = safeName.toString();
+
             log.accept("  Template : " + templateName);
             log.accept("  Datei    : " + outName);
 
@@ -195,6 +205,10 @@ public class ExcelSplitService {
 
     private String escapeCsv(String val) {
         if (val == null || val.isEmpty()) return "";
+        // Security: CSV-Formel-Injection verhindern
+        if (!val.isEmpty() && "=+-@".indexOf(val.charAt(0)) >= 0) {
+            val = "'" + val;
+        }
         if (val.contains(";") || val.contains("\"") || val.contains(" ")
                 || val.contains("\n") || val.contains("\r")) {
             return "\"" + val.replace("\"", "\"\"") + "\"";

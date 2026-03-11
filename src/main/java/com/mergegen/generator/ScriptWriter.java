@@ -49,11 +49,17 @@ public class ScriptWriter {
                         Map<String, List<ForeignKeyRelation>> fkRelations,
                         boolean includeUpdate) throws IOException {
 
+        // Security: Path-Traversal über Tabellennamen verhindern
+        String safeTable = rootTable.toUpperCase();
+        if (!safeTable.matches("[A-Z_$#][A-Z0-9_$#]*")) {
+            throw new IllegalArgumentException("Ungültiger Tabellenname: " + rootTable);
+        }
+
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        String filename  = "MERGE_" + rootTable.toUpperCase() + ".sql";
+        String filename  = "MERGE_" + safeTable + ".sql";
 
         // Unterordner pro Root-Tabelle anlegen
-        File tableDir = new File(outputDir, rootTable.toUpperCase());
+        File tableDir = new File(outputDir, safeTable);
         tableDir.mkdirs();
 
         // Alte Scripts im Tabellenordner löschen

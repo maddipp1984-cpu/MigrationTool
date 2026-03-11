@@ -37,6 +37,7 @@ public class ConnectionProfileManager {
 
     /** Lädt ein Profil und gibt dessen Properties zurück. */
     public Properties load(String profileName) throws IOException {
+        validateName(profileName);
         Properties props = new Properties();
         try (FileInputStream fis = new FileInputStream(profileFile(profileName))) {
             props.load(fis);
@@ -58,11 +59,13 @@ public class ConnectionProfileManager {
 
     /** Löscht ein Profil. Gibt true zurück wenn die Datei existierte und gelöscht wurde. */
     public boolean delete(String profileName) {
+        validateName(profileName);
         return profileFile(profileName).delete();
     }
 
     /** Prüft ob ein Profil mit diesem Namen bereits existiert. */
     public boolean exists(String profileName) {
+        validateName(profileName);
         return profileFile(profileName).exists();
     }
 
@@ -83,11 +86,11 @@ public class ConnectionProfileManager {
      * Bindestrich, Punkt, runde Klammern – alles andere (z.B. / \ : * ?)
      * wäre als Dateiname auf Windows ungültig.
      */
-    private static void validateName(String name) {
+    static void validateName(String name) {
         if (name == null || name.isBlank()) {
             throw new IllegalArgumentException("Profilname darf nicht leer sein.");
         }
-        if (!name.matches("[\\w\\s\\-().]+")) {
+        if (!name.matches("[\\w\\s\\-().]+") || name.contains("..")) {
             throw new IllegalArgumentException(
                 "Ungültiger Profilname. Erlaubt: Buchstaben, Ziffern, Leerzeichen, - _ ( )");
         }

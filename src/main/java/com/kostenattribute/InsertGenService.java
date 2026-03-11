@@ -18,6 +18,19 @@ public class InsertGenService {
 
     private static final Path PRESET_DIR = Paths.get("config/insertgen");
 
+    // ── Namensvalidierung ─────────────────────────────────────────────────
+
+    /** Prüft ob ein Name als Datei-/Tabellenname sicher ist (keine Path-Traversal-Zeichen). */
+    static void validateName(String name, String label) {
+        if (name == null || name.isBlank()) {
+            throw new IllegalArgumentException(label + " darf nicht leer sein.");
+        }
+        if (!name.matches("[\\w\\s\\-().]+")) {
+            throw new IllegalArgumentException(
+                "Ungültiger " + label + ". Erlaubt: Buchstaben, Ziffern, Leerzeichen, - _ ( )");
+        }
+    }
+
     // ── Preset-Verwaltung ───────────────────────────────────────────────────
 
     public List<String> listPresets() {
@@ -34,6 +47,7 @@ public class InsertGenService {
     }
 
     public PresetData loadPreset(String presetName) throws IOException {
+        validateName(presetName, "Preset-Name");
         Path file = PRESET_DIR.resolve(presetName + ".csv");
         if (!Files.exists(file)) return null;
 
@@ -84,6 +98,7 @@ public class InsertGenService {
                            String[] columnNames, List<String[]> rows,
                            String pkColumn, String sequenceName,
                            Map<String, String> fkSubselects) throws IOException {
+        validateName(presetName, "Preset-Name");
         Files.createDirectories(PRESET_DIR);
         Path file = PRESET_DIR.resolve(presetName + ".csv");
         try (BufferedWriter bw = Files.newBufferedWriter(file, StandardCharsets.UTF_8)) {
@@ -122,6 +137,7 @@ public class InsertGenService {
     }
 
     public void deletePreset(String presetName) throws IOException {
+        validateName(presetName, "Preset-Name");
         Path file = PRESET_DIR.resolve(presetName + ".csv");
         Files.deleteIfExists(file);
     }
@@ -206,6 +222,7 @@ public class InsertGenService {
     }
 
     public Path writeScript(String sql, String outputDir, String tableName) throws IOException {
+        validateName(tableName, "Tabellenname");
         Path sqlFile = Paths.get(outputDir, tableName + ".sql");
         Files.createDirectories(sqlFile.getParent());
         Files.writeString(sqlFile, sql, StandardCharsets.UTF_8);
@@ -215,6 +232,10 @@ public class InsertGenService {
     // ── CSV-Hilfsmethoden ───────────────────────────────────────────────────
 
     static String escapeCsv(String value) {
+        // Security: CSV-Formel-Injection verhindern
+        if (!value.isEmpty() && "=+-@".indexOf(value.charAt(0)) >= 0) {
+            value = "'" + value;
+        }
         if (value.contains(";") || value.contains("\"") || value.contains("\n"))
             return "\"" + value.replace("\"", "\"\"") + "\"";
         return value;
