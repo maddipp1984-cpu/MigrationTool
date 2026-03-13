@@ -54,7 +54,7 @@ tasks.register('jlinkRuntime', Exec) {
     doFirst { delete runtimeDir }
 
     commandLine jlink,
-        '--add-modules', 'java.base,java.desktop,java.sql,java.naming,java.logging',
+        '--add-modules', 'java.base,java.desktop,java.sql,java.naming,java.logging,java.management,java.security.jgss,jdk.net,jdk.security.jgss',
         '--strip-debug',
         '--no-man-pages',
         '--no-header-files',

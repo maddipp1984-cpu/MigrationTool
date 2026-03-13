@@ -147,6 +147,48 @@ public class SchemaAnalyzer {
     }
 
     /**
+     * Findet alle Tabellen, die diese Tabelle selbst per FK referenziert
+     * (ausgehende FK-Beziehungen). Gegenstück zu getChildRelations().
+     *
+     * Beispiel: ROOT hat FK-Spalte TYPE_ID → TYPE_TABLE.TYPE_ID
+     * → Ergebnis: ForeignKeyRelation(ROOT, TYPE_ID, TYPE_TABLE, TYPE_ID)
+     *
+     * @return Liste aller ausgehenden FK-Beziehungen.
+     */
+    public List<ForeignKeyRelation> getOutgoingFkRelations(String tableName) throws SQLException {
+        String sql =
+            "SELECT " +
+            "    cc.column_name      AS fk_column, " +
+            "    rc.table_name       AS parent_table, " +
+            "    rcc.column_name     AS parent_pk_column " +
+            "FROM all_constraints c " +
+            "JOIN all_cons_columns cc  ON cc.constraint_name = c.constraint_name  AND cc.owner = c.owner " +
+            "JOIN all_constraints rc   ON rc.constraint_name = c.r_constraint_name AND rc.owner = c.r_owner " +
+            "JOIN all_cons_columns rcc ON rcc.constraint_name = rc.constraint_name AND rcc.owner = rc.owner " +
+            "WHERE c.constraint_type = 'R' " +
+            "  AND c.table_name = ? " +
+            "  AND c.owner = ? " +
+            "ORDER BY cc.position";
+
+        List<ForeignKeyRelation> relations = new ArrayList<>();
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, tableName.toUpperCase());
+            ps.setString(2, schema);
+            try (ResultSet rs = ps.executeQuery()) {
+                while (rs.next()) {
+                    relations.add(new ForeignKeyRelation(
+                        tableName.toUpperCase(),
+                        rs.getString("FK_COLUMN"),
+                        rs.getString("PARENT_TABLE"),
+                        rs.getString("PARENT_PK_COLUMN")
+                    ));
+                }
+            }
+        }
+        return relations;
+    }
+
+    /**
      * Lädt alle Zeilen aus childTable, bei denen fkColumn den Wert
      * parentPkValue hat (also alle direkten Kinder eines Parent-Datensatzes).
      *

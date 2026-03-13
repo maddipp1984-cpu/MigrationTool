@@ -11,6 +11,11 @@ public class DatabaseConnection implements AutoCloseable {
     private final Connection connection;
 
     public DatabaseConnection(DatabaseConfig config) throws SQLException {
+        try {
+            Class.forName("oracle.jdbc.OracleDriver");
+        } catch (ClassNotFoundException e) {
+            throw new SQLException("Oracle JDBC-Treiber nicht gefunden", e);
+        }
         this.connection = DriverManager.getConnection(
             config.getUrl(),
             config.getUser(),

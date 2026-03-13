@@ -27,10 +27,20 @@ public class TraversalService {
 
     private final SchemaAnalyzer analyzer;
     private final VirtualFkStore virtualFkStore;
+    private java.util.function.Consumer<String> logger;
 
     public TraversalService(SchemaAnalyzer analyzer, VirtualFkStore virtualFkStore) {
         this.analyzer       = analyzer;
         this.virtualFkStore = virtualFkStore;
+    }
+
+    /** Setzt einen Logger-Callback für Fortschrittsmeldungen. */
+    public void setLogger(java.util.function.Consumer<String> logger) {
+        this.logger = logger;
+    }
+
+    private void log(String msg) {
+        if (logger != null) logger.accept(msg);
     }
 
     /**
@@ -48,6 +58,7 @@ public class TraversalService {
      * @param rootIdValue Suchwert als String (Zahl oder Text – wird automatisch gequotet)
      */
     public TraversalResult traverse(String rootTable, String rootColumn, String rootIdValue) throws SQLException {
+        log("PK ermitteln für " + rootTable + "...");
         List<String> pkCols = analyzer.getPrimaryKeyColumns(rootTable);
         if (pkCols.isEmpty()) {
             throw new IllegalStateException("Kein Primary Key gefunden für Tabelle: " + rootTable);
@@ -63,6 +74,7 @@ public class TraversalService {
         String rootValueLiteral = toSqlLiteral(rootIdValue);
 
         // Root-Row per Lookup-Spalte laden
+        log("Lade Root-Datensatz: " + rootTable + "." + lookupColumn + " = " + rootValueLiteral);
         TableRow rootRow = analyzer.fetchRowByPk(rootTable, lookupColumn, rootValueLiteral);
 
         // Für die BFS-Traversal den echten PK-Wert verwenden,
@@ -82,10 +94,62 @@ public class TraversalService {
         String rootLabel = extractLabel(rootRow, pkCols);
         if (rootLabel != null) rootNode.addRowLabel(rootLabel);
 
+        // ── Root: ausgehende FKs verfolgen (was referenziert die Root-Tabelle?) ──
+        log("Ausgehende FK-Spalten suchen für " + rootTable + "...");
+        List<ForeignKeyRelation> rootOutgoing = analyzer.getOutgoingFkRelations(rootTable);
+        if (virtualFkStore != null) {
+            // Virtuelle FKs, bei denen Root die Child-Tabelle ist (Root verweist auf Parent)
+            for (ForeignKeyRelation vfk : virtualFkStore.getRelationsForChild(rootTable)) {
+                rootOutgoing.add(vfk);
+            }
+        }
+
+        // Root-Datensatz als erstes aufnehmen
+        String rootKey = buildVisitedKey(rootTable, rootRow, pkCols, rootPkLiteral);
+        visited.add(rootKey);
+        orderedRows.add(rootRow);
+        tableCounts.merge(rootTable, 1, Integer::sum);
+
+        // Referenzierte Datensätze laden und als Startpunkte für BFS verwenden
         // Queue-Einträge: [Tabellenname, PK-Literal (erster PK), TableRow-Objekt, DependencyNode]
         Queue<Object[]> queue = new ArrayDeque<>();
-        queue.add(new Object[]{rootTable, rootPkLiteral, rootRow, rootNode});
 
+        for (ForeignKeyRelation rel : rootOutgoing) {
+            String fkValue = rootRow.getPkRawValue(rel.getFkColumn());
+            if (fkValue == null || "NULL".equals(fkValue)) continue;
+
+            log("  → " + rel.getParentTable() + "." + rel.getParentPkColumn() + " = " + fkValue);
+            List<TableRow> refRows = analyzer.fetchChildRows(
+                rel.getParentTable(), rel.getParentPkColumn(), fkValue);
+            if (refRows.isEmpty()) continue;
+            log("    " + refRows.size() + " Zeile(n) gefunden");
+
+            List<String> refPkCols = analyzer.getPrimaryKeyColumns(rel.getParentTable());
+            String refPkCol = refPkCols.isEmpty() ? rel.getParentPkColumn() : refPkCols.get(0);
+
+            DependencyNode refNode = new DependencyNode(
+                rel.getParentTable(), rel.getParentPkColumn(), fkValue, refRows.size());
+            rootNode.addChild(refNode);
+
+            for (TableRow refRow : refRows) {
+                String label = extractLabel(refRow, refPkCols);
+                if (label != null) refNode.addRowLabel(label);
+            }
+
+            // FK-Relation speichern (Root → referenzierte Tabelle)
+            fkRelations.computeIfAbsent(rootTable.toUpperCase(), k -> new ArrayList<>())
+                       .add(rel);
+
+            for (TableRow refRow : refRows) {
+                String refPkValue = refRow.getPkRawValue(refPkCol);
+                String refKey = buildVisitedKey(rel.getParentTable(), refRow, refPkCols, refPkValue);
+                if (!visited.contains(refKey)) {
+                    queue.add(new Object[]{rel.getParentTable(), refPkValue, refRow, refNode});
+                }
+            }
+        }
+
+        // ── BFS: ab den referenzierten Tabellen normal nach unten (eingehende FKs) ──
         while (!queue.isEmpty()) {
             Object[] entry        = queue.poll();
             String currentTable   = (String) entry[0];
@@ -93,21 +157,17 @@ public class TraversalService {
             TableRow currentRow   = (TableRow) entry[2];
             DependencyNode node   = (DependencyNode) entry[3];
 
-            // Schlüssel aus Tabellenname + allen PK-Werten: eindeutig pro Datensatz
             String key = buildVisitedKey(currentTable, currentRow,
                 analyzer.getPrimaryKeyColumns(currentTable), currentPkValue);
-            if (visited.contains(key)) continue;  // bereits verarbeitet → überspringen
+            if (visited.contains(key)) continue;
             visited.add(key);
 
             orderedRows.add(currentRow);
-            // merge() addiert 1 zu einem existierenden Zähler oder setzt ihn auf 1
             tableCounts.merge(currentTable, 1, Integer::sum);
 
-            // Echte FK-Beziehungen aus dem DB-Dictionary
+            log("Kinder suchen für " + currentTable + " (bisher: " + orderedRows.size() + " Zeilen in " + tableCounts.size() + " Tabellen)");
             List<ForeignKeyRelation> realRelations = analyzer.getChildRelations(currentTable);
 
-            // Virtuelle FKs bereinigen: falls ein Eintrag inzwischen als echter Constraint
-            // in der DB existiert (match auf childTable + fkColumn), wird er entfernt
             if (virtualFkStore != null) {
                 for (ForeignKeyRelation vfk : virtualFkStore.getRelationsForParent(currentTable)) {
                     boolean nowReal = realRelations.stream().anyMatch(r ->
@@ -119,35 +179,31 @@ public class TraversalService {
                 }
             }
 
-            // Kombinierte Liste: echte FKs + verbleibende virtuelle FKs
             List<ForeignKeyRelation> childRelations = new ArrayList<>(realRelations);
             if (virtualFkStore != null) {
                 childRelations.addAll(virtualFkStore.getRelationsForParent(currentTable));
             }
 
-            // FK-Relationen für jede Child-Tabelle sammeln (für Script-Generierung)
             for (ForeignKeyRelation rel : childRelations) {
                 fkRelations.computeIfAbsent(rel.getChildTable().toUpperCase(), k -> new ArrayList<>())
                            .add(rel);
             }
 
             for (ForeignKeyRelation rel : childRelations) {
-                // Alle Child-Zeilen laden, bei denen die FK-Spalte dem aktuellen PK entspricht
+                log("  → " + rel.getChildTable() + "." + rel.getFkColumn() + " = " + currentPkValue);
                 List<TableRow> childRows = analyzer.fetchChildRows(
                     rel.getChildTable(), rel.getFkColumn(), currentPkValue);
 
                 if (childRows.isEmpty()) continue;
+                log("    " + childRows.size() + " Zeile(n) gefunden");
 
-                // DependencyNode für die Child-Tabelle (repräsentiert alle gefundenen Zeilen)
                 DependencyNode childNode = new DependencyNode(
                     rel.getChildTable(), rel.getFkColumn(), currentPkValue, childRows.size());
                 node.addChild(childNode);
 
-                // PK-Spalten einmal ermitteln (gilt für alle Zeilen dieser Tabelle)
                 List<String> childPkCols = analyzer.getPrimaryKeyColumns(rel.getChildTable());
                 String childPkCol = childPkCols.isEmpty() ? rel.getFkColumn() : childPkCols.get(0);
 
-                // Labels: ersten lesbaren String-Wert jeder Zeile für die Baum-Anzeige
                 for (TableRow childRow : childRows) {
                     String label = extractLabel(childRow, childPkCols);
                     if (label != null) childNode.addRowLabel(label);

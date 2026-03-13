@@ -315,6 +315,7 @@ public class GeneratorPanel extends JPanel {
                 try (DatabaseConnection conn = new DatabaseConnection(config)) {
                     SchemaAnalyzer   analyzer = new SchemaAnalyzer(conn.get(), config);
                     TraversalService service  = new TraversalService(analyzer, virtualFkStore);
+                    service.setLogger(this::publish);
 
                     if (values.size() == 1) {
                         return service.traverse(table, column, values.get(0));

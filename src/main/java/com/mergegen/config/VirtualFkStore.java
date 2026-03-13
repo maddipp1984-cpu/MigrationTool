@@ -44,6 +44,20 @@ public class VirtualFkStore {
         return result;
     }
 
+    /**
+     * Gibt alle virtuellen FKs zurück, bei denen die angegebene Tabelle
+     * die Child-Tabelle ist (ausgehende Referenzen).
+     */
+    public List<ForeignKeyRelation> getRelationsForChild(String childTable) {
+        List<ForeignKeyRelation> result = new ArrayList<>();
+        for (ForeignKeyRelation rel : entries) {
+            if (rel.getChildTable().equalsIgnoreCase(childTable)) {
+                result.add(rel);
+            }
+        }
+        return result;
+    }
+
     /** Gibt eine unveränderliche Kopie aller Einträge zurück (für die GUI). */
     public List<ForeignKeyRelation> getAll() {
         return Collections.unmodifiableList(new ArrayList<>(entries));
