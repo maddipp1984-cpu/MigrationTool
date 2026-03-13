@@ -229,6 +229,13 @@ public class GeneratorPanel extends JPanel {
             refreshHistoryList();
         });
 
+        historyList.setToolTipText(
+                "<html>Automatisch gespeicherte Eingaben früherer Analysen.<br>"
+                + "Klick auf einen Eintrag füllt die Eingabefelder.<br>"
+                + "Die Analyse muss erneut ausgeführt werden –<br>"
+                + "Abhängigkeiten werden nicht gespeichert.</html>");
+        removeHistoryBtn.setToolTipText("Markierten Verlaufseintrag löschen");
+
         JPanel historyPanel = new JPanel(new BorderLayout(0, 4));
         historyPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Verlauf"));
         historyPanel.add(new JScrollPane(historyList), BorderLayout.CENTER);

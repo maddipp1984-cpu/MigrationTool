@@ -57,29 +57,32 @@ Ergänzt den MERGE um eine <code>WHEN MATCHED THEN UPDATE SET</code>-Klausel
 für alle Nicht-PK-Spalten. Ohne diese Option wird bei Übereinstimmung
 nichts getan (INSERT-only).
 
-## Analyse-Verlauf
+## Analyse-Verlauf vs. Presets
 
-Links neben der Eingabe wird der <b>Verlauf</b> aller bisherigen Analysen
-angezeigt (Tabellenname + gekürzte Werte).<br><br>
+Es gibt zwei unabhängige Mechanismen, um frühere Abfragen wiederzuverwenden:<br><br>
 
-<b>Eintrag anklicken:</b> Lädt die gespeicherte Abfrage in die Eingabefelder.<br>
-<b>"Entfernen":</b> Löscht den markierten Verlaufseintrag.<br><br>
+<b>Analyse-Verlauf (automatisch):</b><br>
+Links neben der Eingabe wird der Verlauf aller bisherigen Analysen
+automatisch aufgezeichnet (Tabellenname + gekürzte Werte). Jede
+durchgeführte Analyse wird hier gespeichert – ohne manuelles Zutun.<br>
+• <b>Eintrag anklicken:</b> Lädt die Abfrage in die Eingabefelder<br>
+• <b>"Entfernen":</b> Löscht den markierten Verlaufseintrag<br>
+• Duplikate werden erkannt: gleiche Tabelle + Spalte + Werte
+  aktualisieren nur den Zeitstempel und werden nach vorne verschoben<br><br>
 
-Duplikate werden erkannt: gleiche Tabelle + Spalte + Werte (unabhängig
-von Reihenfolge und Groß-/Kleinschreibung) aktualisieren nur den
-Zeitstempel und werden nach vorne verschoben.
-
-## Query-Presets
-
+<b>Query-Presets (manuell):</b><br>
 Über die Preset-Leiste oberhalb der Eingabe können häufig genutzte
-Abfragen gespeichert und wiederverwendet werden.<br><br>
+Abfragen bewusst als benanntes Preset gespeichert werden. Im Gegensatz
+zum Verlauf werden Presets nur auf Knopfdruck angelegt.<br>
+• <b>Preset-Dropdown:</b> Gespeichertes Preset auswählen → füllt alle
+  Eingabefelder automatisch<br>
+• <b>"Neu":</b> Setzt alle Eingabefelder zurück<br>
+• <b>"Löschen":</b> Entfernt das gewählte Preset<br>
+• <b>"Als Preset speichern":</b> Erscheint im Abhängigkeitsbaum nach
+  erfolgreicher Analyse<br><br>
 
-<b>Preset-Dropdown:</b> Gespeicherte Abfrage auswählen → füllt alle
-Eingabefelder automatisch.<br>
-<b>"Neu":</b> Setzt alle Eingabefelder zurück.<br>
-<b>"Löschen":</b> Entfernt das gewählte Preset.<br>
-<b>"Als Preset speichern":</b> Erscheint im Abhängigkeitsbaum nach
-erfolgreicher Analyse.
+<b>Kurzgesagt:</b> Der Verlauf merkt sich automatisch alles was analysiert
+wurde. Presets sind manuell gespeicherte Favoriten für wiederkehrende Abfragen.
 
 ## Abhängigkeitsbaum
 
