@@ -1,0 +1,57 @@
+## Zusammenfassung
+
+<b>Excel Split</b> wandelt Excel-Masterdateien (.xlsx) in CSV-Templates um.
+Jede Masterdatei enthält auf Sheet 2 einen Template-Namen und -Wert,
+die automatisch in die Daten auf Sheet 1 eingetragen werden.<br><br>
+
+<b>Typischer Einsatz:</b><br>
+Aus einer Vorlage (z.B. Kostenattribute, Konfigurationstabellen)
+werden vorbefüllte CSV-Dateien erzeugt, die anschließend per SQL-Loader
+oder anderem Import-Tool in die Zieldatenbank geladen werden können.
+Mehrere Masterdateien werden in einem Durchlauf verarbeitet.
+
+## Felder
+
+<b>Masterdateien (Ordner):</b><br>
+Verzeichnis mit den .xlsx-Quelldateien. Standardmäßig der <code>master/</code>-Ordner
+im Projektverzeichnis. Über <b>"..."</b> kann ein anderer Ordner gewählt werden.<br><br>
+
+<b>Dateiliste (Checkboxen):</b><br>
+Alle gefundenen .xlsx-Dateien werden aufgelistet. Per Checkbox auswählen, welche
+Dateien verarbeitet werden sollen.<br>
+• <b>"Alle an/ab"</b> – schnelles An-/Abwählen aller Dateien<br>
+• <b>"Aktualisieren"</b> – Dateiliste neu laden<br><br>
+
+<b>Ausgabeverzeichnis:</b><br>
+Zielordner für die erzeugten CSV-Dateien. Über <b>"..."</b> kann ein anderer Ordner
+gewählt werden. Vorhandene CSV-Dateien im Zielordner werden vor der Verarbeitung
+automatisch gelöscht.
+
+## Aufbau der Excel-Dateien
+
+Jede Masterdatei (.xlsx) muss zwei Sheets enthalten:<br><br>
+
+<b>Sheet 2 – Template-Informationen (Zeile 1):</b><br>
+• <b>Spalte A:</b> Template-Name → wird als CSV-Dateiname verwendet<br>
+• <b>Spalte B:</b> Template-Wert → wird in Sheet 1, Spalte E, Zeile 2 eingetragen<br>
+• Zeilen ab Zeile 2 werden ignoriert<br><br>
+
+<b>Sheet 1 – Daten:</b><br>
+• <b>Zeile 1:</b> Kopfzeile (bleibt unverändert)<br>
+• <b>Spalte C:</b> Template-Name wird automatisch in jede Datenzeile eingetragen<br>
+• <b>Spalte E, Zeile 2:</b> Template-Wert aus Sheet 2, Spalte B
+
+## Ausgabe
+
+<b>CSV-Dateien:</b><br>
+Pro Masterdatei wird eine CSV-Datei im Ausgabeverzeichnis erzeugt.
+Der Dateiname entspricht dem Template-Namen aus Sheet 2.
+Trennzeichen ist das Semikolon (<code>;</code>).<br><br>
+
+<b>validierung.log:</b><br>
+Im Ausgabeverzeichnis wird eine Log-Datei erstellt mit dem Ergebnis
+je verarbeiteter Datei (OK / Warnung / Fehler) inklusive Zeilen- und Spaltenanzahl.<br><br>
+
+<b>Explorer:</b><br>
+Nach erfolgreicher Verarbeitung wird der Ausgabeordner automatisch
+im Windows Explorer geöffnet.

@@ -1,0 +1,186 @@
+## Zusammenfassung
+
+Der <b>MERGE Generator</b> erstellt Oracle MERGE-Scripts für die Datenmigration
+zwischen Datenbanken. Ausgehend von einem einzelnen Datensatz (z.B. einer
+bestimmten Person) werden automatisch alle abhängigen Datensätze über
+Fremdschlüssel-Beziehungen gefunden und als zusammenhängendes Script
+ausgegeben.<br><br>
+
+<b>Typischer Einsatz:</b><br>
+Stammdaten, Konfigurationen oder Testdaten von einer Oracle-Datenbank
+in eine andere übertragen – inklusive aller Kind-Tabellen, Sequences
+und FK-Abhängigkeiten. Das erzeugte Script ist sofort lauffähig und
+idempotent (MERGE: INSERT wenn neu, optional UPDATE wenn vorhanden).<br><br>
+
+<b>Unterstützte Sonderfälle:</b><br>
+• <b>Composite PKs:</b> Tabellen mit zusammengesetzten Primärschlüsseln
+  werden korrekt erkannt und im MERGE-ON-Abgleich berücksichtigt<br>
+• <b>Self-Referencing FKs:</b> Tabellen, die auf sich selbst verweisen
+  (z.B. MANAGER_ID → EMPLOYEE_ID), werden ohne Endlosschleife traversiert<br>
+• <b>Mehrere Suchwerte:</b> Gleichzeitige Analyse mehrerer Datensätze –
+  Ergebnisse werden automatisch zusammengeführt<br>
+• <b>Sequence-gemappte PKs:</b> Neue IDs per <code>SEQ.NEXTVAL</code> generieren,
+  FK-Spalten in Kind-Tabellen erhalten automatisch die PL/SQL-Variable<br>
+• <b>Virtuelle FKs:</b> Fehlende DB-Constraints manuell definieren,
+  werden beim Traversal mit echten FKs kombiniert und automatisch
+  bereinigt wenn sie später als echte Constraints existieren<br>
+• <b>Testmodus:</b> Jeder Lauf erzeugt ein neues Objekt durch Timestamp-Suffix –
+  ideal für wiederholbare Tests ohne manuelle Bereinigung<br>
+• <b>Skip-Check:</b> Bei INSERT-only mit Kind-Tabellen wird automatisch
+  geprüft, ob der Root-Datensatz eingefügt wurde – wenn nicht, werden
+  Kind-Inserts übersprungen
+
+## Eingabe
+
+<b>Führende Tabelle:</b><br>
+Name der Oracle-Tabelle, von der die Analyse startet. Groß-/Kleinschreibung
+wird automatisch in Großbuchstaben umgewandelt. Pflichtfeld.<br><br>
+
+<b>Spaltenname:</b><br>
+Optionale Angabe der Suchspalte. Wenn leer, wird automatisch der
+Primärschlüssel der Tabelle verwendet. Nützlich, wenn nach einem
+Namensfeld statt der ID gesucht werden soll.<br><br>
+
+<b>Werte:</b><br>
+Suchbegriffe – ein Wert pro Zeile. Mehrere Werte werden nacheinander
+analysiert und die Ergebnisse zusammengeführt. Mindestens ein Wert
+ist erforderlich.<br><br>
+
+<b>Testmodus:</b><br>
+Hängt einen Zeitstempel (<code>_yyyyMMddHHmmss</code>) an den Wert der
+Suchspalte an. Dadurch schlägt der MERGE-Abgleich immer fehl und es
+wird stets ein neuer Datensatz per INSERT angelegt. Voraussetzung:
+Spaltenname muss ausgefüllt sein.<br><br>
+
+<b>Bei Übereinstimmung aktualisieren:</b><br>
+Ergänzt den MERGE um eine <code>WHEN MATCHED THEN UPDATE SET</code>-Klausel
+für alle Nicht-PK-Spalten. Ohne diese Option wird bei Übereinstimmung
+nichts getan (INSERT-only).
+
+## Analyse-Verlauf
+
+Links neben der Eingabe wird der <b>Verlauf</b> aller bisherigen Analysen
+angezeigt (Tabellenname + gekürzte Werte).<br><br>
+
+<b>Eintrag anklicken:</b> Lädt die gespeicherte Abfrage in die Eingabefelder.<br>
+<b>"Entfernen":</b> Löscht den markierten Verlaufseintrag.<br><br>
+
+Duplikate werden erkannt: gleiche Tabelle + Spalte + Werte (unabhängig
+von Reihenfolge und Groß-/Kleinschreibung) aktualisieren nur den
+Zeitstempel und werden nach vorne verschoben.
+
+## Query-Presets
+
+Über die Preset-Leiste oberhalb der Eingabe können häufig genutzte
+Abfragen gespeichert und wiederverwendet werden.<br><br>
+
+<b>Preset-Dropdown:</b> Gespeicherte Abfrage auswählen → füllt alle
+Eingabefelder automatisch.<br>
+<b>"Neu":</b> Setzt alle Eingabefelder zurück.<br>
+<b>"Löschen":</b> Entfernt das gewählte Preset.<br>
+<b>"Als Preset speichern":</b> Erscheint im Abhängigkeitsbaum nach
+erfolgreicher Analyse.
+
+## Abhängigkeitsbaum
+
+Nach der Analyse wird ein hierarchischer Baum angezeigt:<br><br>
+
+• <b>Root-Tabelle</b> mit dem gesuchten Datensatz<br>
+• <b>Kind-Tabellen</b> – alle über FK-Beziehungen abhängigen Tabellen<br>
+• <b>Zeilenanzahl</b> pro Tabelle in der Zusammenfassung<br><br>
+
+Von hier aus können:<br>
+• <b>← Zurück:</b> Eingabe ändern<br>
+• <b>Als Preset speichern:</b> Aktuelle Abfrage als Preset sichern<br>
+• <b>Merge Scripts erzeugen:</b> Script-Generierung starten
+
+## MERGE-Script
+
+Das generierte MERGE-Statement pro Datensatz:<br><br>
+
+<code>MERGE INTO &lt;tabelle&gt; tgt<br>
+USING (SELECT ... FROM DUAL) src<br>
+ON (&lt;pk-abgleich&gt;)<br>
+WHEN NOT MATCHED THEN INSERT ...;<br></code><br>
+
+<b>ON-Klausel:</b><br>
+• Normalerweise Abgleich über alle PK-Spalten<br>
+• Bei Suche über Namensspalte: Abgleich über diese Spalte (erlaubt
+  neue PK-Generierung per Sequence)<br><br>
+
+<b>Werte-Priorität pro Spalte:</b><br>
+1. PL/SQL-Variable (FK auf Sequence-gemappten Parent-PK)<br>
+2. <code>SEQUENCE.NEXTVAL</code> (direkte Sequence-Zuordnung)<br>
+3. SQL-Literal (Wert aus der Quelldatenbank)<br><br>
+
+<b>Ausgabe:</b><br>
+<code>&lt;ausgabeverzeichnis&gt;/&lt;TABELLENNAME&gt;/MERGE_&lt;TABELLENNAME&gt;.sql</code><br>
+Pro Tabelle eine Datei, wird bei jeder Generierung überschrieben.
+
+## PL/SQL-Block
+
+Wenn Sequences konfiguriert sind, wird ein PL/SQL-Block erzeugt:<br><br>
+
+<code>DECLARE<br>
+&nbsp;&nbsp;v_PKCOL_1 NUMBER;<br>
+BEGIN<br>
+&nbsp;&nbsp;SELECT SEQ.NEXTVAL INTO v_PKCOL_1 FROM DUAL;<br>
+&nbsp;&nbsp;MERGE INTO ... ;<br>
+END;<br>
+/</code><br><br>
+
+• Pro Sequence-PK eine Variable (<code>v_&lt;PKCOL&gt;_&lt;N&gt;</code>, max. 30 Zeichen)<br>
+• FK-Spalten in Kind-Tabellen erhalten automatisch die Variable statt des Literals<br>
+• <b>Skip-Check:</b> Bei INSERT-only mit Kind-Tabellen wird nach dem Root-MERGE
+  <code>SQL%ROWCOUNT</code> geprüft – wenn nichts eingefügt wurde, wird abgebrochen
+
+## Sequence-Mappings
+
+Tab "Sequence-Mappings" im MergeGen-Bereich.<br>
+Ordnet PK-Spalten einer Oracle-Sequence zu.<br><br>
+
+<b>Tabelle mit drei Spalten:</b><br>
+• <b>Tabelle:</b> Tabellenname<br>
+• <b>PK-Spalte:</b> Primärschlüssel-Spalte<br>
+• <b>Sequence-Name:</b> Name der Oracle-Sequence<br><br>
+
+<b>"Hinzufügen":</b> Neuen Eintrag anlegen (alle drei Felder Pflicht).<br>
+<b>"Entfernen":</b> Markierten Eintrag löschen.<br><br>
+
+Beim Generieren werden Mappings als Vorschlag verwendet. Dreistufige
+Logik: 1. Store-Eintrag → 2. Trigger-Erkennung → 3. leeres Feld.
+Leere Eingabe = PK-Wert aus Quelle 1:1 übernehmen.
+
+## Virtuelle FKs
+
+Tab "Virtuelle FKs" im MergeGen-Bereich.<br>
+Definiert FK-Beziehungen, die nicht als DB-Constraint existieren.<br><br>
+
+<b>Tabelle mit vier Spalten:</b><br>
+• <b>Child-Tabelle:</b> Tabelle mit der FK-Spalte<br>
+• <b>FK-Spalte:</b> Spalte, die den Fremdschlüssel enthält<br>
+• <b>Parent-Tabelle:</b> Referenzierte Tabelle<br>
+• <b>Parent-PK-Spalte:</b> Referenzierte Spalte im Parent<br><br>
+
+<b>"Hinzufügen":</b> Neuen virtuellen FK anlegen (alle vier Felder Pflicht).<br>
+<b>"Entfernen":</b> Markierten Eintrag löschen.<br><br>
+
+Virtuelle FKs werden beim Traversal mit echten DB-FKs kombiniert.
+<b>Auto-Bereinigung:</b> Wenn ein virtueller FK inzwischen als echter
+Constraint in der DB existiert, wird er automatisch entfernt.
+
+## DB-Verbindung
+
+Im Einstellungen-Bereich unter "DB-Verbindung".<br><br>
+
+<b>Profil:</b> Gespeicherte Verbindungen laden/löschen.<br>
+<b>Host / Port / SID:</b> Oracle-Datenbankserver (Port Standard: 1521).<br>
+<b>Benutzer / Passwort:</b> Anmeldedaten (Passwort wird nicht gespeichert).<br>
+<b>Schema:</b> Zielschema (automatisch Großbuchstaben).<br><br>
+
+<b>"Verbindung testen":</b> Prüft die Einstellungen im Hintergrund.<br>
+<b>"Speichern":</b> Profil auf Festplatte speichern.<br><br>
+
+<b>Ausgabeverzeichnis:</b><br>
+Zielordner für die generierten SQL-Dateien. Über "Durchsuchen" wählbar,
+wird sofort in <code>app.properties</code> gespeichert.

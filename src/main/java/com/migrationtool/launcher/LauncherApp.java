@@ -156,6 +156,7 @@ public class LauncherApp {
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.setMinimumSize(new Dimension(820, 560));
         frame.setLayout(new BorderLayout());
+        frame.setJMenuBar(buildMenuBar(frame));
         frame.add(splitPane, BorderLayout.CENTER);
         frame.pack();
         frame.setLocationRelativeTo(null);
@@ -257,6 +258,45 @@ public class LauncherApp {
         try (var out = Files.newOutputStream(NAV_PROPS)) {
             props.store(out, null);
         } catch (IOException ignored) {}
+    }
+
+    // ── Menüleiste ────────────────────────────────────────────────────────────
+
+    private static JMenuBar buildMenuBar(JFrame frame) {
+        JMenuBar menuBar = new JMenuBar();
+
+        JMenu helpMenu = new JMenu("Hilfe");
+        JMenuItem mergeGenHelp = new JMenuItem("MERGE Generator");
+        mergeGenHelp.addActionListener(e ->
+            new HelpDialog(frame, "MERGE Generator", "/help/mergegen.html").setVisible(true)
+        );
+        helpMenu.add(mergeGenHelp);
+
+        JMenuItem excelSplitHelp = new JMenuItem("Excel Split");
+        excelSplitHelp.addActionListener(e ->
+            new HelpDialog(frame, "Excel Split", "/help/excelsplit.html").setVisible(true)
+        );
+        helpMenu.add(excelSplitHelp);
+
+        JMenuItem insertGenHelp = new JMenuItem("INSERT Generator");
+        insertGenHelp.addActionListener(e ->
+            new HelpDialog(frame, "INSERT Generator", "/help/insertgen.html").setVisible(true)
+        );
+        helpMenu.add(insertGenHelp);
+
+        helpMenu.addSeparator();
+
+        JMenuItem aboutItem = new JMenuItem("Über Migration Tools");
+        aboutItem.addActionListener(e ->
+            JOptionPane.showMessageDialog(frame,
+                "Migration Tools\nVersion 1.0\n\nMergeGen · ExcelSplit · INSERT Generator",
+                "Über Migration Tools",
+                JOptionPane.INFORMATION_MESSAGE)
+        );
+        helpMenu.add(aboutItem);
+
+        menuBar.add(helpMenu);
+        return menuBar;
     }
 
     // ── Basispfad-Erkennung ───────────────────────────────────────────────────

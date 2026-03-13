@@ -1,0 +1,109 @@
+## Zusammenfassung
+
+Der <b>INSERT Generator</b> erstellt Oracle INSERT-Scripts für beliebige
+Zieltabellen. Die Daten werden direkt in einer Tabelle im Tool erfasst
+oder per Ctrl+V aus Excel eingefügt. Pro Zieltabelle kann ein Preset
+mit Spaltenstruktur und Daten gespeichert werden.<br><br>
+
+<b>Typischer Einsatz:</b><br>
+Kleinere Datenmengen (Lookup-Tabellen, Konfigurationswerte, Stammdaten)
+manuell pflegen und als fertiges SQL-Script exportieren. Unterstützt
+Sequences für automatische IDs und FK-Subselects für Verweise auf
+andere Tabellen. Jedes INSERT enthält eine WHERE NOT EXISTS-Prüfung,
+sodass das Script mehrfach ausführbar ist ohne Duplikate zu erzeugen.
+
+## Preset-Verwaltung
+
+<b>Preset (Dropdown):</b><br>
+Gespeicherte Konfigurationen laden. Jedes Preset speichert Zieltabelle,
+Spaltenstruktur, Daten, PK-Spalte, Sequence und FK-Subselects.
+Presets werden als CSV-Dateien unter <code>config/insertgen/</code> gespeichert.<br><br>
+
+<b>Preset speichern:</b><br>
+Aktuelle Tabelle als Preset speichern. Beim Speichern wird ein Name abgefragt.
+Existiert das Preset bereits, wird nachgefragt ob es überschrieben werden soll.<br><br>
+
+<b>Preset löschen:</b><br>
+Das aktuell gewählte Preset unwiderruflich löschen.
+
+## Felder
+
+<b>Zieltabelle:</b><br>
+Name der Oracle-Zieltabelle, in die eingefügt werden soll (z.B. <code>MY_TABLE</code>).
+Pflichtfeld – wird für die Script-Generierung und den Dateinamen benötigt.<br><br>
+
+<b>PK-Spalte (Dropdown):</b><br>
+Optionale Auswahl der Primärschlüssel-Spalte. Wird gold/fett im Spaltenheader
+hervorgehoben. In Kombination mit einer Sequence wird der PK-Wert
+durch <code>SEQ.NEXTVAL</code> ersetzt und aus der WHERE NOT EXISTS-Prüfung
+ausgenommen.<br><br>
+
+<b>Sequence:</b><br>
+Optionaler Name der Oracle-Sequence (z.B. <code>MY_SEQ</code>).
+Nur relevant wenn eine PK-Spalte gewählt ist. Im generierten Script
+wird <code>SEQUENCE.NEXTVAL</code> statt des Literalwerts verwendet.
+
+## Tabelle bearbeiten
+
+<b>Spalten hinzufügen:</b><br>
+Über den <b>➕</b>-Button wird eine neue Spalte mit frei wählbarem Namen angelegt.<br><br>
+
+<b>Spalte umbenennen:</b><br>
+Doppelklick auf den Spaltenheader öffnet einen Dialog zum Umbenennen.<br><br>
+
+<b>Spalten verschieben:</b><br>
+Spalte durch Klick auf den Header auswählen (wird blau hinterlegt),
+dann mit <b>◀</b> / <b>▶</b> nach links/rechts verschieben.
+Die Reihenfolge bestimmt die Spaltenreihenfolge im INSERT-Script.<br><br>
+
+<b>Spalte/Zeilen löschen:</b><br>
+<b>"Spalte löschen"</b> entfernt die aktuell ausgewählte Spalte.
+<b>"Zeilen löschen"</b> entfernt die in der Tabelle markierten Zeilen.<br><br>
+
+<b>Daten einfügen (Ctrl+V):</b><br>
+Tabellarische Daten aus Excel oder anderen Quellen einfügen.
+Bei leerer Tabelle wird gefragt, ob die erste Zeile die Spaltenüberschrift ist.
+Bei bestehender Tabelle wird ab der Cursor-Position eingefügt.
+
+## FK-Subselects
+
+<b>FK mit Subselect definieren:</b><br>
+Rechtsklick auf einen Spaltenheader → <b>"FK mit Subselect"</b>.
+Im Dialog einen SQL-Subselect eingeben, z.B.:<br>
+<code>SELECT ID FROM OTHER_TABLE WHERE NAME = {WERT}</code><br><br>
+
+<b>Platzhalter {WERT}:</b><br>
+Wird pro Zeile durch den Zellwert ersetzt. Zahlen werden ohne Anführungszeichen
+eingesetzt, Texte mit einfachen Anführungszeichen. Klammern werden automatisch
+ergänzt falls nicht vorhanden.<br><br>
+
+<b>Header-Markierung:</b><br>
+FK-Spalten werden <i>hellblau + kursiv</i> im Header dargestellt.<br>
+PK-Spalten werden <b style="color:#B8860B">gold + fett</b> dargestellt.
+
+## Script-Generierung
+
+<b>"Script generieren":</b><br>
+Erzeugt ein Oracle-SQL-Script mit folgender Struktur:<br><br>
+
+<code>DELETE FROM &lt;tabelle&gt;;</code><br><br>
+
+Pro Datenzeile:<br>
+<code>INSERT INTO &lt;tabelle&gt; (spalten...)<br>
+SELECT werte... FROM DUAL<br>
+WHERE NOT EXISTS (SELECT 1 FROM &lt;tabelle&gt; WHERE bedingungen...);</code><br><br>
+
+<b>Besonderheiten:</b><br>
+• PK mit Sequence: <code>SEQ.NEXTVAL</code> statt Literalwert, PK nicht in WHERE NOT EXISTS<br>
+• FK-Spalten: Subselect statt Literalwert<br>
+• Leere Zellen: <code>NULL</code><br>
+• Ausgabe: <code>&lt;output-dir&gt;/&lt;TABELLENNAME&gt;.sql</code>
+
+## Speichern
+
+<b>"Speichern"-Button:</b><br>
+Überschreibt das aktuell gewählte Preset mit dem aktuellen Tabelleninhalt.
+Ist kein Preset gewählt, wird "Preset speichern" aufgerufen.<br><br>
+
+<b>Änderungserkennung:</b><br>
+Bei ungespeicherten Änderungen wird der Speichern-Button blau hervorgehoben.
