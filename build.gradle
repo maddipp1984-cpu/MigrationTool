@@ -23,6 +23,7 @@ repositories {
 dependencies {
     implementation files('lib/ojdbc11.jar')
     implementation 'org.apache.poi:poi-ooxml:5.2.5'
+    implementation 'com.formdev:flatlaf:3.5.4'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly    'org.junit.platform:junit-platform-launcher'
@@ -76,7 +77,7 @@ tasks.register('jlinkRuntime', Exec) {
     doFirst { delete runtimeDir }
 
     commandLine jlink,
-        '--add-modules', 'java.base,java.desktop,java.sql,java.naming,java.logging,java.management,java.security.jgss,jdk.net,jdk.security.jgss',
+        '--add-modules', 'java.base,java.desktop,java.sql,java.naming,java.logging,java.management,java.prefs,java.security.jgss,jdk.net,jdk.security.jgss',
         '--strip-debug',
         '--no-man-pages',
         '--no-header-files',

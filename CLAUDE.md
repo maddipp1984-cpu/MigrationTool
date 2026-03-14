@@ -76,6 +76,9 @@ MigrationTool/
 - Cards: `mergegen` (JTabbedPane), `excelsplit`, `insertgen`, `settings`
 - Globale DB-Einstellungen: `SettingsPanel`-Instanz einmalig erstellt, als Card und als Parameter an `GeneratorPanel` übergeben
 - `MainFrame` wird im Launcher nicht verwendet – Panels direkt eingebettet
+- **Look & Feel**: FlatLaf (com.formdev:flatlaf:3.5.4) – 4 Themes (Light, Dark, IntelliJ, Darcula)
+- Theme-Umschalter: Menü „Ansicht" mit RadioButtons, Live-Wechsel via `FlatLaf.updateUI()`
+- Theme-Persistenz: `config/launcher/theme.properties` (Key: `theme`)
 
 ---
 
@@ -247,8 +250,10 @@ config/
 │   └── traversal-rules.txt     – Globale Traversal-Regeln pro Root-Tabelle
 ├── excelsplit/
 │   └── excel-split.properties   – masterDir, outputDir
-└── insertgen/
-    └── <preset>.csv             – Pro Preset: #TABLE=<name>, Header, Datenzeilen
+├── insertgen/
+│   └── <preset>.csv             – Pro Preset: #TABLE=<name>, Header, Datenzeilen
+└── launcher/
+    └── theme.properties         – Gewähltes FlatLaf-Theme (FlatLight/FlatDark/FlatIntelliJ/FlatDarcula)
 ```
 
 ## Nicht in Git

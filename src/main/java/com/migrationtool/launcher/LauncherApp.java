@@ -4,6 +4,11 @@ import com.excelsplit.AppConfig;
 import com.excelsplit.ExcelSplitService;
 import com.excelsplit.MainPresenter;
 import com.excelsplit.MainWindow;
+import com.formdev.flatlaf.FlatDarculaLaf;
+import com.formdev.flatlaf.FlatDarkLaf;
+import com.formdev.flatlaf.FlatIntelliJLaf;
+import com.formdev.flatlaf.FlatLightLaf;
+import com.formdev.flatlaf.FlatLaf;
 import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.GlobalTraversalRuleStore;
 import com.mergegen.config.QueryPresetStore;
@@ -21,6 +26,7 @@ import com.mergegen.gui.VirtualFkPanel;
 import javax.swing.*;
 import javax.swing.tree.*;
 import java.awt.*;
+import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
 import java.util.List;
@@ -33,12 +39,53 @@ import java.util.List;
  */
 public class LauncherApp {
 
-    public static void main(String[] args) {
-        try {
-            UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName());
-        } catch (Exception ignored) { }
+    private static final Path THEME_FILE = Paths.get("config", "launcher", "theme.properties");
 
+    public static void main(String[] args) {
+        setupLookAndFeel();
         SwingUtilities.invokeLater(LauncherApp::createAndShow);
+    }
+
+    // ── Look & Feel ─────────────────────────────────────────────────────────────
+
+    private static void setupLookAndFeel() {
+        String themeName = loadThemeName();
+        applyTheme(themeName);
+    }
+
+    private static void applyTheme(String themeName) {
+        try {
+            switch (themeName) {
+                case "FlatDark":     FlatDarkLaf.setup();     break;
+                case "FlatIntelliJ": FlatIntelliJLaf.setup(); break;
+                case "FlatDarcula":  FlatDarculaLaf.setup();  break;
+                default:             FlatLightLaf.setup();    break;
+            }
+        } catch (Exception e) {
+            // Fallback auf System L&F
+            try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
+            catch (Exception ignored) { }
+        }
+    }
+
+    private static String loadThemeName() {
+        if (!Files.exists(THEME_FILE)) return "FlatLight";
+        try {
+            Properties p = new Properties();
+            p.load(Files.newBufferedReader(THEME_FILE));
+            return p.getProperty("theme", "FlatLight");
+        } catch (IOException e) {
+            return "FlatLight";
+        }
+    }
+
+    private static void saveThemeName(String themeName) {
+        try {
+            Files.createDirectories(THEME_FILE.getParent());
+            Properties p = new Properties();
+            p.setProperty("theme", themeName);
+            p.store(Files.newBufferedWriter(THEME_FILE), "Look & Feel");
+        } catch (IOException ignored) { }
     }
 
     private static void createAndShow() {
@@ -169,6 +216,32 @@ public class LauncherApp {
     private static JMenuBar buildMenuBar(JFrame frame) {
         JMenuBar menuBar = new JMenuBar();
 
+        // ── Ansicht-Menü (Theme-Umschalter) ─────────────────────────────────
+        JMenu viewMenu = new JMenu("Ansicht");
+
+        String currentTheme = loadThemeName();
+        ButtonGroup themeGroup = new ButtonGroup();
+        String[][] themes = {
+            {"FlatLight",   "Hell (Light)"},
+            {"FlatDark",    "Dunkel (Dark)"},
+            {"FlatIntelliJ","IntelliJ"},
+            {"FlatDarcula", "Darcula"}
+        };
+
+        for (String[] t : themes) {
+            JRadioButtonMenuItem item = new JRadioButtonMenuItem(t[1], t[0].equals(currentTheme));
+            themeGroup.add(item);
+            item.addActionListener(e -> {
+                applyTheme(t[0]);
+                FlatLaf.updateUI();
+                saveThemeName(t[0]);
+            });
+            viewMenu.add(item);
+        }
+
+        menuBar.add(viewMenu);
+
+        // ── Hilfe-Menü ──────────────────────────────────────────────────────
         JMenu helpMenu = new JMenu("Hilfe");
         JMenuItem mergeGenHelp = new JMenuItem("MERGE Generator");
         mergeGenHelp.addActionListener(e ->
