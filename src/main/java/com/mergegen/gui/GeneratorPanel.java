@@ -1071,13 +1071,18 @@ public class GeneratorPanel extends JPanel {
                 TraversalRuleStore.TraversalRule rule;
                 if (choice == 2) {
                     // Subselect: Spaltenauswahl-Dialog anzeigen
-                    result[0] = TraversalService.TraversalDecision.SUBSELECT;
-                    rule = TraversalRuleStore.TraversalRule.SUBSELECT;
-                    askSubselectColumns(childTable);
+                    boolean columnsSelected = askSubselectColumns(childTable);
+                    if (columnsSelected) {
+                        result[0] = TraversalService.TraversalDecision.SUBSELECT;
+                        rule = TraversalRuleStore.TraversalRule.SUBSELECT;
+                    } else {
+                        // Cancel im Spalten-Dialog -> Fallback auf SKIP
+                        result[0] = TraversalService.TraversalDecision.SKIP;
+                        rule = TraversalRuleStore.TraversalRule.SKIP;
+                    }
                 } else if (choice == 1) {
                     result[0] = TraversalService.TraversalDecision.SKIP;
                     rule = TraversalRuleStore.TraversalRule.SKIP;
-                    constTableStore.add(childTable);
                 } else {
                     result[0] = TraversalService.TraversalDecision.TRAVERSE;
                     rule = TraversalRuleStore.TraversalRule.TRAVERSE;
@@ -1092,9 +1097,9 @@ public class GeneratorPanel extends JPanel {
 
     /**
      * Zeigt einen Dialog zur Auswahl der Lookup-Spalten fuer das Subselect.
-     * Laedt die Spalten der Tabelle und laesst den User die Lookup-Spalten waehlen.
+     * @return true wenn Spalten ausgewaehlt wurden, false bei Cancel/Fehler
      */
-    private void askSubselectColumns(String table) {
+    private boolean askSubselectColumns(String table) {
         try {
             var config = settingsPanel.getCurrentConfig();
             try (DatabaseConnection conn = new DatabaseConnection(config)) {
@@ -1102,7 +1107,6 @@ public class GeneratorPanel extends JPanel {
                 List<String> pkCols = tempAnalyzer.getPrimaryKeyColumns(table);
                 List<ColumnInfo> allCols = tempAnalyzer.getColumns(table, pkCols);
 
-                // Nur Nicht-PK-Spalten als Lookup-Kandidaten anbieten
                 List<String> candidates = new java.util.ArrayList<>();
                 for (ColumnInfo col : allCols) {
                     if (!col.isPrimaryKey()) candidates.add(col.getName());
@@ -1112,7 +1116,7 @@ public class GeneratorPanel extends JPanel {
                     JOptionPane.showMessageDialog(this,
                         "Keine Nicht-PK-Spalten in " + table + " gefunden.",
                         "Subselect", JOptionPane.WARNING_MESSAGE);
-                    return;
+                    return false;
                 }
 
                 JList<String> colList = new JList<>(candidates.toArray(new String[0]));
@@ -1134,6 +1138,7 @@ public class GeneratorPanel extends JPanel {
                     List<String> selectedCols = colList.getSelectedValuesList();
                     String pkCol = pkCols.isEmpty() ? "ID" : pkCols.get(0);
                     subselectStore.add(table, pkCol, selectedCols);
+                    return true;
                 }
             }
         } catch (Exception e) {
@@ -1141,6 +1146,7 @@ public class GeneratorPanel extends JPanel {
                 "Fehler beim Laden der Spalten: " + e.getMessage(),
                 "Subselect", JOptionPane.ERROR_MESSAGE);
         }
+        return false;
     }
 
     /** Erstellt einen GridBagConstraints-Helfer mit voreingestellten Abständen. */

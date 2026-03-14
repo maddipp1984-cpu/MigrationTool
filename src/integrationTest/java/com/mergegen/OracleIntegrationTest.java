@@ -497,52 +497,6 @@ class OracleIntegrationTest {
         }
     }
 
-    private void cleanupTestData(String testLastName) throws SQLException {
-        try (Connection rwConn = DriverManager.getConnection(
-                config.getUrl(), config.getUser(), config.getPassword())) {
-            rwConn.setAutoCommit(false);
-            // Erst Kinder loeschen (FK-Constraints)
-            try (PreparedStatement ps = rwConn.prepareStatement(
-                    "DELETE FROM HR.SKILL_ENDORSEMENTS WHERE SKILL_ID IN " +
-                    "(SELECT SKILL_ID FROM HR.EMPLOYEE_SKILLS WHERE EMPLOYEE_ID IN " +
-                    "(SELECT EMPLOYEE_ID FROM HR.EMPLOYEES WHERE LAST_NAME = ?))")) {
-                ps.setString(1, testLastName);
-                ps.executeUpdate();
-            }
-            try (PreparedStatement ps = rwConn.prepareStatement(
-                    "DELETE FROM HR.EMPLOYEE_SKILLS WHERE EMPLOYEE_ID IN " +
-                    "(SELECT EMPLOYEE_ID FROM HR.EMPLOYEES WHERE LAST_NAME = ?)")) {
-                ps.setString(1, testLastName);
-                ps.executeUpdate();
-            }
-            try (PreparedStatement ps = rwConn.prepareStatement(
-                    "DELETE FROM HR.CONTRACT_ITEMS WHERE CONTRACT_ID IN " +
-                    "(SELECT CONTRACT_ID FROM HR.EMPLOYEE_CONTRACTS WHERE EMPLOYEE_ID IN " +
-                    "(SELECT EMPLOYEE_ID FROM HR.EMPLOYEES WHERE LAST_NAME = ?))")) {
-                ps.setString(1, testLastName);
-                ps.executeUpdate();
-            }
-            try (PreparedStatement ps = rwConn.prepareStatement(
-                    "DELETE FROM HR.EMPLOYEE_CONTRACTS WHERE EMPLOYEE_ID IN " +
-                    "(SELECT EMPLOYEE_ID FROM HR.EMPLOYEES WHERE LAST_NAME = ?)")) {
-                ps.setString(1, testLastName);
-                ps.executeUpdate();
-            }
-            try (PreparedStatement ps = rwConn.prepareStatement(
-                    "DELETE FROM HR.JOB_HISTORY WHERE EMPLOYEE_ID IN " +
-                    "(SELECT EMPLOYEE_ID FROM HR.EMPLOYEES WHERE LAST_NAME = ?)")) {
-                ps.setString(1, testLastName);
-                ps.executeUpdate();
-            }
-            try (PreparedStatement ps = rwConn.prepareStatement(
-                    "DELETE FROM HR.EMPLOYEES WHERE LAST_NAME = ?")) {
-                ps.setString(1, testLastName);
-                ps.executeUpdate();
-            }
-            rwConn.commit();
-        }
-    }
-
     private void deleteDirectory(File dir) {
         File[] files = dir.listFiles();
         if (files != null) {

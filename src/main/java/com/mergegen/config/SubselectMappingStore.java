@@ -72,7 +72,13 @@ public class SubselectMappingStore {
         List<String> lookupCols = List.of(Arrays.copyOfRange(entry, 1, entry.length));
 
         String whereClause = lookupCols.stream()
-            .map(col -> col + " = " + rowValues.get(col))
+            .map(col -> {
+                String val = rowValues.get(col);
+                if (val == null || "NULL".equals(val)) {
+                    return col + " IS NULL";
+                }
+                return col + " = " + val;
+            })
             .collect(Collectors.joining(" AND "));
 
         return "(SELECT " + pkCol + " FROM " + table.toUpperCase()

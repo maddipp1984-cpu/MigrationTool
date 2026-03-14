@@ -34,3 +34,5 @@ bin/
 # OS
 Thumbs.db
 .DS_Store
+.metadata/
+traversal.log

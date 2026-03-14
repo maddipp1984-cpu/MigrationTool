@@ -91,4 +91,32 @@ class SubselectMappingStoreTest {
         assertFalse(store.hasMapping("NONEXISTENT"));
         assertNull(store.getLookupColumns("NONEXISTENT"));
     }
+
+    @Test
+    void buildSubselect_nullLookupValue() {
+        store.add("DEPARTMENTS", "DEPARTMENT_ID", List.of("DEPARTMENT_NAME"));
+        Map<String, String> rowValues = new HashMap<>();
+        rowValues.put("DEPARTMENT_NAME", null);
+        String result = store.buildSubselect("DEPARTMENTS", rowValues);
+        assertTrue(result.contains("DEPARTMENT_NAME IS NULL"),
+            "NULL-Wert muss IS NULL erzeugen");
+    }
+
+    @Test
+    void buildSubselect_explicitNullLiteral() {
+        store.add("DEPARTMENTS", "DEPARTMENT_ID", List.of("DEPARTMENT_NAME"));
+        String result = store.buildSubselect("DEPARTMENTS",
+            Map.of("DEPARTMENT_NAME", "NULL"));
+        assertTrue(result.contains("DEPARTMENT_NAME IS NULL"),
+            "SQL-Literal NULL muss IS NULL erzeugen");
+    }
+
+    @Test
+    void buildSubselect_missingLookupColumn() {
+        store.add("DEPARTMENTS", "DEPARTMENT_ID", List.of("DEPARTMENT_NAME"));
+        // rowValues enthaelt die Lookup-Spalte nicht
+        String result = store.buildSubselect("DEPARTMENTS", Map.of());
+        assertTrue(result.contains("DEPARTMENT_NAME IS NULL"),
+            "Fehlende Spalte muss IS NULL erzeugen");
+    }
 }

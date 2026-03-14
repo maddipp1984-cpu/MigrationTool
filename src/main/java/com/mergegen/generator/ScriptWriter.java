@@ -25,10 +25,6 @@ public class ScriptWriter {
 
     private final MergeScriptGenerator mergeGenerator = new MergeScriptGenerator();
 
-    // Temporaere Felder, gesetzt pro write()-Aufruf
-    private SubselectMappingStore currentSubselectStore;
-    private Map<String, TableRow> currentSubselectRows;
-
     /**
      * Schreibt alle MERGE-Statements in eine .sql-Datei.
      *
@@ -56,8 +52,8 @@ public class ScriptWriter {
                         SubselectMappingStore subselectStore,
                         Map<String, TableRow> subselectRows) throws IOException {
 
-        this.currentSubselectStore = subselectStore;
-        this.currentSubselectRows = subselectRows != null ? subselectRows : new HashMap<>();
+        SubselectMappingStore ssStore = subselectStore;
+        Map<String, TableRow> ssRows = subselectRows != null ? subselectRows : new HashMap<>();
 
         File outputFile = prepareOutputFile(rootTable, outputDir);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
@@ -72,7 +68,8 @@ public class ScriptWriter {
 
             if (usePlSql) {
                 writePlSqlBlock(writer, orderedRows, tableCounts, rootTable, nameColumn,
-                        testSuffix, sequenceMap, fkRelations != null ? fkRelations : new HashMap<>(), includeUpdate);
+                        testSuffix, sequenceMap, fkRelations != null ? fkRelations : new HashMap<>(), includeUpdate,
+                        ssStore, ssRows);
             } else {
                 writePlainStatements(writer, orderedRows, tableCounts, rootTable, nameColumn, testSuffix, sequenceMap, includeUpdate);
             }
@@ -116,7 +113,9 @@ public class ScriptWriter {
                                  String rootTable, String nameColumn, String testSuffix,
                                  Map<String, String> sequenceMap,
                                  Map<String, List<ForeignKeyRelation>> fkRelations,
-                                 boolean includeUpdate) throws IOException {
+                                 boolean includeUpdate,
+                                 SubselectMappingStore ssStore,
+                                 Map<String, TableRow> ssRows) throws IOException {
 
         // ── Phase 1: varMap aufbauen ───────────────────────────────────────────
         // varMap:  "TABLE.PKCOL#altWert" → Variablenname
@@ -192,7 +191,7 @@ public class ScriptWriter {
             }
 
             // colVarSubstitutions für DIESE Zeile aufbauen
-            Map<String, String> colVarSubs = buildColVarSubstitutions(row, table, sequenceMap, varMap, fkRelations);
+            Map<String, String> colVarSubs = buildColVarSubstitutions(row, table, sequenceMap, varMap, fkRelations, ssStore, ssRows);
 
             // NEXTVAL-Statement vor dem MERGE (nur wenn diese Zeile eigene sequence-PK hat)
             for (ColumnInfo col : row.getColumns().values()) {
@@ -231,7 +230,9 @@ public class ScriptWriter {
             TableRow row, String tableUpper,
             Map<String, String> sequenceMap,
             Map<String, String> varMap,
-            Map<String, List<ForeignKeyRelation>> fkRelations) {
+            Map<String, List<ForeignKeyRelation>> fkRelations,
+            SubselectMappingStore ssStore,
+            Map<String, TableRow> ssRows) {
 
         Map<String, String> subs = new HashMap<>();
 
@@ -263,10 +264,10 @@ public class ScriptWriter {
                     }
 
                     // 2. Subselect-Mapping fuer Parent-Tabelle?
-                    if (currentSubselectStore != null && currentSubselectStore.hasMapping(parentTable)) {
-                        TableRow refRow = currentSubselectRows.get(parentTable + "#" + colVal);
+                    if (ssStore != null && ssStore.hasMapping(parentTable)) {
+                        TableRow refRow = ssRows != null ? ssRows.get(parentTable + "#" + colVal) : null;
                         if (refRow != null) {
-                            String subselect = currentSubselectStore.buildSubselect(parentTable, refRow.getValues());
+                            String subselect = ssStore.buildSubselect(parentTable, refRow.getValues());
                             if (subselect != null) {
                                 subs.put(colName, subselect);
                                 break;
@@ -359,8 +360,8 @@ public class ScriptWriter {
                                   SubselectMappingStore subselectStore,
                                   Map<String, TableRow> subselectRows) throws IOException {
 
-        this.currentSubselectStore = subselectStore;
-        this.currentSubselectRows = subselectRows != null ? subselectRows : new HashMap<>();
+        SubselectMappingStore ssStore = subselectStore;
+        Map<String, TableRow> ssRows = subselectRows != null ? subselectRows : new HashMap<>();
 
         File outputFile = prepareOutputFile(rootTable, outputDir);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
@@ -396,7 +397,8 @@ public class ScriptWriter {
 
                 if (usePlSql) {
                     writePlSqlBlock(writer, rows, counts, rootTable, nameColumn,
-                            testSuffix, sequenceMap, fkRelations != null ? fkRelations : new HashMap<>(), includeUpdate);
+                            testSuffix, sequenceMap, fkRelations != null ? fkRelations : new HashMap<>(), includeUpdate,
+                            ssStore, ssRows);
                 } else {
                     writePlainStatements(writer, rows, counts, rootTable, nameColumn, testSuffix, sequenceMap, includeUpdate);
                 }

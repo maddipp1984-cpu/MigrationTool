@@ -244,12 +244,7 @@ public class TraversalService {
                     rel.getFkColumn(), refRows.size());
             if (decision == TraversalDecision.SUBSELECT) {
                 log("    -> Subselect (Referenz-Zeilen gespeichert)");
-                List<String> refPkColsSub = getCachedPkColumns(rel.getParentTable(), pkCache);
-                String refPkColSub = refPkColsSub.isEmpty() ? rel.getParentPkColumn() : refPkColsSub.get(0);
-                for (TableRow refRow : refRows) {
-                    String refPkValue = refRow.getPkRawValue(refPkColSub);
-                    subselectRows.put(rel.getParentTable().toUpperCase() + "#" + refPkValue, refRow);
-                }
+                collectSubselectRows(rel.getParentTable(), rel.getParentPkColumn(), refRows, pkCache, subselectRows);
                 continue;
             }
             if (decision == TraversalDecision.SKIP) {
@@ -322,12 +317,7 @@ public class TraversalService {
                     rel.getFkColumn(), childRows.size());
             if (decisionChild == TraversalDecision.SUBSELECT) {
                 log("    -> Subselect (Referenz-Zeilen gespeichert)");
-                List<String> childPkColsSub = getCachedPkColumns(rel.getChildTable(), pkCache);
-                String childPkColSub = childPkColsSub.isEmpty() ? rel.getFkColumn() : childPkColsSub.get(0);
-                for (TableRow childRow : childRows) {
-                    String childPkValue = childRow.getPkRawValue(childPkColSub);
-                    subselectRows.put(rel.getChildTable().toUpperCase() + "#" + childPkValue, childRow);
-                }
+                collectSubselectRows(rel.getChildTable(), rel.getFkColumn(), childRows, pkCache, subselectRows);
                 continue;
             }
             if (decisionChild == TraversalDecision.SKIP) {
@@ -418,12 +408,7 @@ public class TraversalService {
                         rel.getFkColumn(), childRows.size());
                 if (bfsDecision == TraversalDecision.SUBSELECT) {
                     log("    -> Subselect (Referenz-Zeilen gespeichert)");
-                    List<String> bfsPkCols = getCachedPkColumns(rel.getChildTable(), pkCache);
-                    String bfsPkCol = bfsPkCols.isEmpty() ? rel.getFkColumn() : bfsPkCols.get(0);
-                    for (TableRow childRow : childRows) {
-                        String bfsPkValue = childRow.getPkRawValue(bfsPkCol);
-                        subselectRows.put(rel.getChildTable().toUpperCase() + "#" + bfsPkValue, childRow);
-                    }
+                    collectSubselectRows(rel.getChildTable(), rel.getFkColumn(), childRows, pkCache, subselectRows);
                     continue;
                 }
                 if (bfsDecision == TraversalDecision.SKIP) {
@@ -592,6 +577,19 @@ public class TraversalService {
             sb.append("#").append(row.getPkRawValue(pkCol));
         }
         return sb.toString();
+    }
+
+    /** Sammelt Referenz-Zeilen fuer Subselect-Ersetzung in die subselectRows-Map. */
+    private void collectSubselectRows(String table, String fallbackPkCol,
+                                       List<TableRow> rows,
+                                       Map<String, List<String>> pkCache,
+                                       Map<String, TableRow> subselectRows) {
+        List<String> pkCols = getCachedPkColumns(table, pkCache);
+        String pkCol = pkCols.isEmpty() ? fallbackPkCol : pkCols.get(0);
+        for (TableRow row : rows) {
+            String pkValue = row.getPkRawValue(pkCol);
+            subselectRows.put(table.toUpperCase() + "#" + pkValue, row);
+        }
     }
 
     /**

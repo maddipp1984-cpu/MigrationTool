@@ -85,7 +85,7 @@ class ScriptWriterTest {
         Map<String, List<ForeignKeyRelation>> fkRels = new HashMap<>();
 
         Map<String, String> subs = writer.buildColVarSubstitutions(
-            row, "AUFTRAG", sequenceMap, varMap, fkRels);
+            row, "AUFTRAG", sequenceMap, varMap, fkRels, null, null);
 
         assertEquals("v_ID_1", subs.get("ID"), "Eigener PK muss Variable bekommen");
         assertNull(subs.get("NAME"), "NAME ist kein PK und kein FK");
@@ -103,7 +103,7 @@ class ScriptWriterTest {
             new ForeignKeyRelation("POSITION", "AUFTRAG_ID", "AUFTRAG", "ID")));
 
         Map<String, String> subs = writer.buildColVarSubstitutions(
-            row, "POSITION", sequenceMap, varMap, fkRels);
+            row, "POSITION", sequenceMap, varMap, fkRels, null, null);
 
         assertEquals("v_ID_1", subs.get("AUFTRAG_ID"),
             "FK auf sequence-gemappten Parent muss Variable bekommen");
@@ -121,7 +121,7 @@ class ScriptWriterTest {
             new ForeignKeyRelation("POSITION", "AUFTRAG_ID", "AUFTRAG", "ID")));
 
         Map<String, String> subs = writer.buildColVarSubstitutions(
-            row, "POSITION", sequenceMap, varMap, fkRels);
+            row, "POSITION", sequenceMap, varMap, fkRels, null, null);
 
         assertTrue(subs.isEmpty(), "Ohne Sequences darf keine Substitution erfolgen");
     }

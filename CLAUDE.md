@@ -5,8 +5,8 @@ Einzelnes Gradle-Projekt, das **MergeGen** (Oracle MERGE-Script-Generator), **Ex
 ## Package-Regeln
 
 - Neue Klassen immer im fachlich passenden Package anlegen, **nicht** im Launcher-Package
-- `com.migrationtool.launcher` enthält nur `LauncherApp` und `WorkflowPanel` – keine Tool-Klassen
-- Jedes Tool bekommt ein eigenes Package (z.B. `com.migrationtool.scriptexec`, `com.kostenattribute`)
+- `com.migrationtool.launcher` enthält nur `LauncherApp` und `HelpDialog` – keine Tool-Klassen
+- Jedes Tool bekommt ein eigenes Package (z.B. `com.kostenattribute`)
 - Bei Unsicherheit: bestehendes Package-Layout als Orientierung nehmen
 
 ## Projektstruktur
@@ -31,16 +31,18 @@ MigrationTool/
     │   │   └── model/           (ColumnInfo, TableRow, DependencyNode, ForeignKeyRelation, SequenceMapping, TraversalResult, QueryPreset, TableHistoryEntry)
     │   ├── com/excelsplit/      (ExcelSplit, AppConfig, ExcelSplitService, MainPresenter, MainWindow)
     │   ├── com/kostenattribute/ (InsertGenPanel, InsertGenService)
-    │   ├── com/migrationtool/scriptexec/ (ScriptExecutorPanel, ScriptExecutorService, ZielDbPanel)
-    │   └── com/migrationtool/launcher/  (LauncherApp, WorkflowPanel – NUR diese beiden)
-    └── test/java/com/mergegen/  – 50 JUnit-5-Tests (keine DB nötig)
+    │   └── com/migrationtool/launcher/  (LauncherApp, HelpDialog – NUR diese beiden)
+    └── test/java/com/mergegen/  – 61 JUnit-5-Tests (keine DB nötig)
 ```
 
 ## Build-Kommandos
 
 ```bash
 ./gradlew test
-# → 50 MergeGen-Tests; ExcelSplit hat keine Tests
+# → 61 Unit-Tests (MergeGen + SubselectMapping); ExcelSplit hat keine Tests
+
+./gradlew integrationTest
+# → 18 Integration-Tests gegen Oracle XE (Docker)
 
 ./gradlew shadowJar
 # → build/libs/MigrationTool.jar (Fat-JAR, ~25 MB)
@@ -57,25 +59,11 @@ MigrationTool/
 - Main-Class: `com.migrationtool.launcher.LauncherApp`
 - Single-Frame mit `BorderLayout`: Seitenleiste (WEST, 155 px) + Content-Bereich (CENTER, `CardLayout`)
 - Navigationsbaum (JTree) mit fester Struktur:
-  - `Alles ausführen` → `WorkflowPanel` (immer ganz oben, nicht verschiebbar)
-  - Werkzeug-Kategorien (z.B. `Exceltools`, `Mergescripte`) → **per Drag & Drop umsortierbar**
-  - `Einstellungen` → `SettingsPanel` (immer ganz unten, nicht verschiebbar)
-- Cards: `workflow` (WorkflowPanel), `mergegen` (JTabbedPane), `excelsplit`, `insertgen`, `settings`
+  - Werkzeug-Kategorien: `Exceltools` → Excel Split, `Mergescripte` → MERGE Generator / INSERT Generator
+  - `Einstellungen` → DB-Verbindung
+- Cards: `mergegen` (JTabbedPane), `excelsplit`, `insertgen`, `settings`
 - Globale DB-Einstellungen: `SettingsPanel`-Instanz einmalig erstellt, als Card und als Parameter an `GeneratorPanel` übergeben
 - `MainFrame` wird im Launcher nicht verwendet – Panels direkt eingebettet
-
-### WorkflowPanel
-- Klasse: `com.migrationtool.launcher.WorkflowPanel`
-- Zeigt alle Werkzeug-Schritte der Reihe nach mit Status (○ Bereit / ◎ Läuft / ✓ OK / ✗ Fehler)
-- „Alle ausführen"-Button startet alle Schritte sequenziell; bei Fehler Abbruch
-- Jeder Schritt hat eigenen „Ausführen"-Button für Einzelausführung
-- `addStep(Step)` / `moveStep(int from, int to)` – bei DnD-Umsortierung synchron gehalten
-- MergeGen-Schritt im Auto-Modus: nutzt letzte AppSettings (Tabelle/Spalte/Werte), Sequences aus SequenceMappingStore (kein Dialog)
-
-### Drag & Drop (Navigationsbaum)
-- Nur Kategorieknoten (zwischen den fixen Knoten) sind verschiebbar
-- `TransferHandler` mit `DropMode.INSERT`: beim Drop werden Baummodell, `moveableNodes`-Liste und WorkflowPanel synchron aktualisiert
-- Reihenfolge wird sofort in `launcher.properties` gespeichert und beim nächsten Start wiederhergestellt
 
 ---
 
@@ -243,10 +231,8 @@ config/
 │   └── table-history.txt        – Analyse-Verlauf
 ├── excelsplit/
 │   └── excel-split.properties   – masterDir, outputDir
-├── insertgen/
-│   └── <preset>.csv             – Pro Preset: #TABLE=<name>, Header, Datenzeilen
-└── launcher/
-    └── launcher.properties      – nav.order (Kategorie-Reihenfolge im Baum)
+└── insertgen/
+    └── <preset>.csv             – Pro Preset: #TABLE=<name>, Header, Datenzeilen
 ```
 
 ## Nicht in Git
