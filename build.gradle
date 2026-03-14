@@ -25,6 +25,7 @@ dependencies {
     implementation 'org.apache.poi:poi-ooxml:5.2.5'
     implementation 'com.formdev:flatlaf:3.5.4'
     implementation 'com.fifesoft:rsyntaxtextarea:3.5.3'
+    implementation 'com.github.vlsi.mxgraph:jgraphx:4.2.2'
 
     testImplementation 'org.junit.jupiter:junit-jupiter:5.10.2'
     testRuntimeOnly    'org.junit.platform:junit-platform-launcher'

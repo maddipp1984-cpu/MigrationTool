@@ -34,7 +34,7 @@ MigrationTool/
 └── src/
     ├── main/java/
     │   ├── com/mergegen/
-    │   │   ├── gui/             (GeneratorPanel, SettingsPanel, VirtualFkPanel, SequenceMappingPanel, ConstantTablePanel, DiffDialog, MainFrame, GuiApp)
+    │   │   ├── gui/             (GeneratorPanel, SettingsPanel, VirtualFkPanel, SequenceMappingPanel, ConstantTablePanel, DiffDialog, DiagramDialog, MainFrame, GuiApp)
     │   │   ├── analyzer/        (SchemaAnalyzer)
     │   │   ├── service/         (TraversalService)
     │   │   ├── generator/       (MergeScriptGenerator, ScriptWriter, LineDiff)
@@ -140,6 +140,14 @@ MigrationTool/
 - **Optional UPDATE**: Checkbox „Bei Übereinstimmung aktualisieren" → `WHEN MATCHED THEN UPDATE SET` für alle Nicht-PK-Spalten (Sequence/ColVar-Spalten ausgenommen)
 - **Skip-Check bei INSERT-only**: wenn kein UPDATE + Child-Tabellen vorhanden → PL/SQL-Block mit `SQL%ROWCOUNT`-Prüfung nach Root-MERGEs; wenn kein Root-Datensatz eingefügt → `RETURN`
 - **Per-Object-Generierung**: bei mehreren Objekten (Werten) erzeugt `ScriptWriter.writePerObject()` separate PL/SQL-Blöcke pro Objekt mit jeweils frischen DECLARE-Variablen; Konstantentabellen-Filter wird pro Objekt angewendet
+
+### Abhängigkeitsdiagramm (DiagramDialog)
+- Button "Diagramm anzeigen" in CARD_TREE, öffnet separates modeless Fenster
+- Library: JGraphX (`com.github.vlsi.mxgraph:jgraphx:4.2.2`) für automatisches hierarchisches Layout
+- Tabellen-Boxen: Name + Zeilenanzahl, PK-Spalte, FK-Spalten; Root blau, normal grün, Konstanten grau/gestrichelt
+- FK-Linien: Beschriftung mit FK-Spalte + Traversal-Status (JA/SKIP/SUBSELECT), Farbcodierung grün/grau/blau
+- Interaktion: Zoom (Mausrad), Verschieben (Drag), Escape schließt
+- Legende am unteren Rand
 
 ### SQL-Vorschau & Diff-Modus
 - **CARD_RESULT**: Zusammenfassung oben + RSyntaxTextArea (SQL-Highlighting) unten

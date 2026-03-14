@@ -421,15 +421,26 @@ public class GeneratorPanel extends JPanel {
         splitPane.setResizeWeight(1.0);
         p.add(splitPane, BorderLayout.CENTER);
 
+        JButton diagramBtn = new JButton("Diagramm anzeigen");
+
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         buttons.add(backBtn);
         buttons.add(savePresetBtn);
         buttons.add(generateBtn);
+        buttons.add(diagramBtn);
         p.add(buttons, BorderLayout.SOUTH);
 
         backBtn.addActionListener(e -> cards.show(cardPane, CARD_INPUT));
         generateBtn.addActionListener(e -> startGeneration());
         savePresetBtn.addActionListener(e -> saveCurrentPreset());
+        diagramBtn.addActionListener(e -> {
+            if (lastResult != null) {
+                new DiagramDialog(
+                    javax.swing.SwingUtilities.getWindowAncestor(this),
+                    lastResult, ruleStore, constTableStore
+                ).setVisible(true);
+            }
+        });
 
         return p;
     }
