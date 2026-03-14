@@ -11,6 +11,7 @@ import javax.swing.*;
 import javax.swing.text.BadLocationException;
 import javax.swing.text.DefaultHighlighter;
 import java.awt.*;
+import java.awt.event.KeyEvent;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
@@ -96,21 +97,23 @@ public class DiffDialog extends JDialog {
         applyHighlights(leftArea, leftHighlights, COLOR_REMOVED);
         applyHighlights(rightArea, rightHighlights, COLOR_ADDED);
 
-        // Synchrones Scrollen
-        JScrollBar leftVBar  = new RTextScrollPane(leftArea).getVerticalScrollBar();
-        JScrollBar rightVBar = new RTextScrollPane(rightArea).getVerticalScrollBar();
-
+        // Synchrones Scrollen (mit Flag gegen Rekursion)
         RTextScrollPane leftScroll  = new RTextScrollPane(leftArea);
         RTextScrollPane rightScroll = new RTextScrollPane(rightArea);
+        final boolean[] syncing = {false};
 
         leftScroll.getVerticalScrollBar().addAdjustmentListener(e -> {
-            if (!e.getValueIsAdjusting()) {
+            if (!syncing[0]) {
+                syncing[0] = true;
                 rightScroll.getVerticalScrollBar().setValue(e.getValue());
+                syncing[0] = false;
             }
         });
         rightScroll.getVerticalScrollBar().addAdjustmentListener(e -> {
-            if (!e.getValueIsAdjusting()) {
+            if (!syncing[0]) {
+                syncing[0] = true;
                 leftScroll.getVerticalScrollBar().setValue(e.getValue());
+                syncing[0] = false;
             }
         });
 
@@ -152,11 +155,22 @@ public class DiffDialog extends JDialog {
         bottomPanel.add(Box.createHorizontalStrut(30));
         bottomPanel.add(new JLabel("+" + added + "  -" + removed + "  =" + same));
 
+        bottomPanel.add(Box.createHorizontalGlue());
+        JButton closeBtn = new JButton("Schließen");
+        closeBtn.addActionListener(e -> dispose());
+        bottomPanel.add(closeBtn);
+
         setLayout(new BorderLayout());
         add(splitPane, BorderLayout.CENTER);
         add(bottomPanel, BorderLayout.SOUTH);
         setSize(1200, 700);
         setLocationRelativeTo(owner);
+
+        // Escape schließt den Dialog
+        getRootPane().registerKeyboardAction(
+            e -> dispose(),
+            KeyStroke.getKeyStroke(java.awt.event.KeyEvent.VK_ESCAPE, 0),
+            JComponent.WHEN_IN_FOCUSED_WINDOW);
     }
 
     private RSyntaxTextArea createSqlArea(String text) {

@@ -330,9 +330,11 @@ public class ScriptWriter {
                              Map<String, Integer> tableCounts, String timestamp) throws IOException {
         writer.write("-- =================================================================\n");
         writer.write("-- Oracle MERGE Script\n");
-        writer.write("-- Generiert: " + timestamp.replace("_", " ").replace(
-            timestamp.substring(9), timestamp.substring(9).replace(
-                timestamp.substring(11), ":"  + timestamp.substring(11, 13) + ":" + timestamp.substring(13))) + "\n");
+        // yyyyMMdd_HHmmss -> yyyy-MM-dd HH:mm:ss
+        String readable = timestamp.substring(0, 4) + "-" + timestamp.substring(4, 6) + "-"
+            + timestamp.substring(6, 8) + " " + timestamp.substring(9, 11) + ":"
+            + timestamp.substring(11, 13) + ":" + timestamp.substring(13);
+        writer.write("-- Generiert: " + readable + "\n");
         writer.write("-- Fuehrende Tabelle: " + rootTable.toUpperCase() + "\n");
         if (rootIds.size() == 1) {
             writer.write("-- ID: " + rootIds.get(0) + "\n");

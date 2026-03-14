@@ -836,8 +836,8 @@ public class GeneratorPanel extends JPanel {
 
                     // SQL-Vorschau laden
                     try {
-                        String sql = new String(java.nio.file.Files.readAllBytes(
-                            java.nio.file.Paths.get(filename)));
+                        String sql = java.nio.file.Files.readString(
+                            java.nio.file.Paths.get(filename));
                         sqlPreviewArea.setText(sql);
                         sqlPreviewArea.setCaretPosition(0);
                     } catch (Exception ignored) {
@@ -874,7 +874,11 @@ public class GeneratorPanel extends JPanel {
             if (dir == null || !java.nio.file.Files.isDirectory(dir)) return null;
 
             String currentName = current.getFileName().toString();
+            // Präfix bis zum Timestamp extrahieren (z.B. "MERGE_EMPLOYEES_")
+            String prefix = currentName.replaceAll("\\d{8}_\\d{6}\\.sql$", "");
+
             return java.nio.file.Files.list(dir)
+                .filter(p -> p.getFileName().toString().startsWith(prefix))
                 .filter(p -> p.getFileName().toString().endsWith(".sql"))
                 .filter(p -> !p.getFileName().toString().equals(currentName))
                 .sorted(java.util.Comparator.comparing(
