@@ -370,6 +370,31 @@ public class SchemaAnalyzer {
     }
 
     /**
+     * Sucht in STB_TABDEF nach einem Sequence-Namen fuer die gegebene Tabelle.
+     * Gibt den Wert aus SEQ_NAME zurueck, falls ein Eintrag existiert.
+     */
+    public Optional<String> lookupSequenceFromTabdef(String tableName) {
+        String sql =
+            "SELECT SEQ_NAME FROM " + schema + ".STB_TABDEF " +
+            "WHERE UPPER(TAB_NAME) = ? AND SEQ_NAME IS NOT NULL";
+
+        try (PreparedStatement ps = connection.prepareStatement(sql)) {
+            ps.setString(1, tableName.toUpperCase());
+            try (ResultSet rs = ps.executeQuery()) {
+                if (rs.next()) {
+                    String seqName = rs.getString("SEQ_NAME");
+                    if (seqName != null && !seqName.trim().isEmpty()) {
+                        return Optional.of(seqName.trim().toUpperCase());
+                    }
+                }
+            }
+        } catch (SQLException ex) {
+            // STB_TABDEF existiert nicht oder Zugriff nicht moeglich – kein Abbruch
+        }
+        return Optional.empty();
+    }
+
+    /**
      * Hilfsmethode: gibt den gespeicherten SQL-Literal-Wert einer PK-Spalte zurück.
      * Wird im TraversalService benötigt, um den PK-Wert für Child-Abfragen weiterzugeben.
      */

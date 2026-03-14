@@ -680,7 +680,7 @@ public class GeneratorPanel extends JPanel {
 
                     String key = tbl + "." + pkCol;
 
-                    // Dreistufige Vorschlags-Logik
+                    // Vierstufige Vorschlags-Logik
                     String suggestion = "";
 
                     // 1. Im Store gespeichert?
@@ -689,7 +689,15 @@ public class GeneratorPanel extends JPanel {
                         suggestion = stored.get().getSequenceName();
                     }
 
-                    // 2. Kein Store-Eintrag → Trigger prüfen
+                    // 2. STB_TABDEF nachschlagen
+                    if (suggestion.isEmpty() && triggerAnalyzer != null) {
+                        Optional<String> tabdefSeq = triggerAnalyzer.lookupSequenceFromTabdef(tbl);
+                        if (tabdefSeq.isPresent()) {
+                            suggestion = tabdefSeq.get();
+                        }
+                    }
+
+                    // 3. Trigger pruefen
                     if (suggestion.isEmpty() && triggerAnalyzer != null) {
                         Optional<String> triggerSeq = triggerAnalyzer.detectTriggerSequence(tbl);
                         if (triggerSeq.isPresent()) {
@@ -697,7 +705,7 @@ public class GeneratorPanel extends JPanel {
                         }
                     }
 
-                    // 3. Dialog anzeigen
+                    // 4. Dialog anzeigen
                     String input = (String) JOptionPane.showInputDialog(
                         this,
                         "Tabelle " + tbl + ", PK-Spalte " + pkCol +
