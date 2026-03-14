@@ -34,10 +34,10 @@ MigrationTool/
 └── src/
     ├── main/java/
     │   ├── com/mergegen/
-    │   │   ├── gui/             (GeneratorPanel, SettingsPanel, VirtualFkPanel, SequenceMappingPanel, ConstantTablePanel, MainFrame, GuiApp)
+    │   │   ├── gui/             (GeneratorPanel, SettingsPanel, VirtualFkPanel, SequenceMappingPanel, ConstantTablePanel, DiffDialog, MainFrame, GuiApp)
     │   │   ├── analyzer/        (SchemaAnalyzer)
     │   │   ├── service/         (TraversalService)
-    │   │   ├── generator/       (MergeScriptGenerator, ScriptWriter)
+    │   │   ├── generator/       (MergeScriptGenerator, ScriptWriter, LineDiff)
     │   │   ├── config/          (AppSettings, ConnectionProfileManager, VirtualFkStore, SequenceMappingStore, ConstantTableStore, QueryPresetStore, GlobalTraversalRuleStore, DatabaseConfig)
     │   │   ├── db/              (DatabaseConnection)
     │   │   └── model/           (ColumnInfo, TableRow, DependencyNode, ForeignKeyRelation, SequenceMapping, TraversalResult, QueryPreset)
@@ -141,6 +141,14 @@ MigrationTool/
 - **Skip-Check bei INSERT-only**: wenn kein UPDATE + Child-Tabellen vorhanden → PL/SQL-Block mit `SQL%ROWCOUNT`-Prüfung nach Root-MERGEs; wenn kein Root-Datensatz eingefügt → `RETURN`
 - **Per-Object-Generierung**: bei mehreren Objekten (Werten) erzeugt `ScriptWriter.writePerObject()` separate PL/SQL-Blöcke pro Objekt mit jeweils frischen DECLARE-Variablen; Konstantentabellen-Filter wird pro Objekt angewendet
 
+### SQL-Vorschau & Diff-Modus
+- **CARD_RESULT**: Zusammenfassung oben + RSyntaxTextArea (SQL-Highlighting) unten
+- Dependency: `com.fifesoft:rsyntaxtextarea:3.5.3`
+- **Timestamp-Dateinamen**: `MERGE_<TABELLE>_<yyyyMMdd_HHmmss>.sql` – alte Scripts bleiben erhalten
+- **Diff-Button**: erscheint wenn älteres Script im selben Verzeichnis existiert
+- **DiffDialog**: Side-by-Side mit synchronem Scrollen, Zeilenweise Highlights (grün/rot), Statistik
+- **LineDiff**: LCS-basierter zeilenweiser Vergleich (keine externe Library)
+
 ### Globale Traversal-Regeln (`GlobalTraversalRuleStore`)
 - Datei: `traversal-rules.txt`, Format: `ROOT_TABLE|PARENT>CHILD.FK=JA;PARENT>CHILD.FK=NEIN;...`
 - Beim Start der Analyse: wenn Regeln für die Root-Tabelle existieren, Dialog „Übernehmen / Neu eingeben / Abbrechen"
@@ -159,13 +167,14 @@ MigrationTool/
 - Drei Felder: Führende Tabelle | Spaltenname (optional, leer = PK auto) | Wert
 - Letzte Tabelle + Spalte werden in `app.properties` gespeichert und beim nächsten Start vorausgefüllt
 
-### Unit-Tests (62 Tests, keine DB nötig)
+### Unit-Tests (69 Tests, keine DB nötig)
 - **MergeScriptGeneratorTest** (12): MERGE-SQL-Struktur, Sequence-Ersetzung, Prioritätskette (ColVar > Seq > Literal), Testmodus-Suffix, ON-Klausel, UPDATE-Block
 - **SubselectGeneratorTest** (3): Subselect-Ersetzung im USING-SELECT, Priorität ColVar > Subselect, Original-Literal ohne Subselect
 - **ScriptWriterTest** (16): `buildVarName` (30-Zeichen-Limit), `buildColVarSubstitutions`, Plain vs. PL/SQL-Mode, Typ-Erkennung, 4-Ebenen-FK-Kette, 2-Root-Rows, Skip-Check
 - **TraversalServiceTest** (12): `toSqlLiteral()` – Zahlen, Strings, Escaping, Null/Blank
 - **SubselectMappingStoreTest** (11): Add/Get, Composite-Lookup, Case-Insensitiv, Remove, Persistenz-Roundtrip, buildSubselect (single/composite/null/missing/explicitNull)
 - **GlobalTraversalRuleStoreTest** (8): Save/Get, Case-Insensitiv, Update, Multiple Tables, Persistenz-Roundtrip, Empty-Remove, Subselect
+- **LineDiffTest** (7): Identisch, komplett verschieden, Zeile eingefügt/entfernt, leere Inputs
 - Refactoring für Testbarkeit: `ScriptWriter.buildVarName()` + `buildColVarSubstitutions()` sind package-private
 
 ---

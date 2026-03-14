@@ -312,14 +312,11 @@ public class ScriptWriter {
         }
         File tableDir = new File(outputDir, safeTable);
         tableDir.mkdirs();
-        File[] oldFiles = tableDir.listFiles((d, name) -> name.endsWith(".sql"));
-        if (oldFiles != null) {
-            for (File f : oldFiles) f.delete();
-        }
-        String fileName = (alias != null && !alias.trim().isEmpty())
+        String baseName = (alias != null && !alias.trim().isEmpty())
             ? alias.trim().replaceAll("[^A-Za-z0-9_\\-]", "_")
             : safeTable;
-        return new File(tableDir, "MERGE_" + fileName + ".sql");
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        return new File(tableDir, "MERGE_" + baseName + "_" + timestamp + ".sql");
     }
 
     private void writeTableHeader(BufferedWriter writer, String table, int count) throws IOException {

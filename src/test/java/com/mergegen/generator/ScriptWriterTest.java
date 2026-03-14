@@ -278,7 +278,8 @@ class ScriptWriterTest {
             new HashMap<>(), null, null, null, false, null, null, null);
 
         assertTrue(path.contains("AUFTRAG"), "Unterordner muss Tabellenname enthalten");
-        assertTrue(path.endsWith("MERGE_AUFTRAG.sql"), "Dateiname falsch");
+        assertTrue(Path.of(path).getFileName().toString().matches("MERGE_AUFTRAG_\\d{8}_\\d{6}\\.sql"),
+            "Dateiname muss Timestamp enthalten: " + path);
         assertTrue(Files.exists(Path.of(path)), "Datei muss existieren");
     }
 

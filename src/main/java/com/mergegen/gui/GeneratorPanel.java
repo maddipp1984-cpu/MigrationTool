@@ -72,6 +72,10 @@ public class GeneratorPanel extends JPanel {
     // Step 3 – Ergebnis
     private final JTextArea resultArea = new JTextArea(6, 50);
     private final JButton   newBtn     = new JButton("Neue Abfrage");
+    private final JButton   diffBtn    = new JButton("Mit letzter Version vergleichen");
+    private org.fife.ui.rsyntaxtextarea.RSyntaxTextArea sqlPreviewArea;
+    private String lastGeneratedFile;
+    private String lastPreviousFile;
 
     // Zwischengespeichertes Traversal-Ergebnis: wird in startAnalysis() befüllt
     // und in startGeneration() verwendet, damit die DB nur einmal abgefragt wird.
@@ -544,14 +548,33 @@ public class GeneratorPanel extends JPanel {
         JPanel p = new JPanel(new BorderLayout(0, 10));
         p.setBorder(new EmptyBorder(20, 30, 20, 30));
 
+        // Zusammenfassung oben
         resultArea.setEditable(false);
         resultArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
-        p.add(new JScrollPane(resultArea), BorderLayout.CENTER);
+        resultArea.setRows(6);
+        JScrollPane summaryScroll = new JScrollPane(resultArea);
+        summaryScroll.setPreferredSize(new Dimension(0, 120));
 
+        // SQL-Vorschau mit Syntax-Highlighting
+        sqlPreviewArea = new org.fife.ui.rsyntaxtextarea.RSyntaxTextArea();
+        sqlPreviewArea.setSyntaxEditingStyle(org.fife.ui.rsyntaxtextarea.SyntaxConstants.SYNTAX_STYLE_SQL);
+        sqlPreviewArea.setEditable(false);
+        sqlPreviewArea.setCodeFoldingEnabled(true);
+        sqlPreviewArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
+        org.fife.ui.rtextarea.RTextScrollPane sqlScroll = new org.fife.ui.rtextarea.RTextScrollPane(sqlPreviewArea);
+
+        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, summaryScroll, sqlScroll);
+        splitPane.setDividerLocation(120);
+        splitPane.setResizeWeight(0.0);
+        p.add(splitPane, BorderLayout.CENTER);
+
+        // Buttons
         JButton backToTreeBtn = new JButton("← Zurück zum Baum");
+        diffBtn.setVisible(false);
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         buttons.add(backToTreeBtn);
         buttons.add(newBtn);
+        buttons.add(diffBtn);
         p.add(buttons, BorderLayout.SOUTH);
 
         backToTreeBtn.addActionListener(e -> cards.show(cardPane, CARD_TREE));
@@ -560,6 +583,16 @@ public class GeneratorPanel extends JPanel {
         newBtn.addActionListener(e -> {
             resetInputCard();
             cards.show(cardPane, CARD_INPUT);
+        });
+
+        diffBtn.addActionListener(e -> {
+            if (lastPreviousFile != null && lastGeneratedFile != null) {
+                new DiffDialog(
+                    SwingUtilities.getWindowAncestor(this),
+                    java.nio.file.Paths.get(lastPreviousFile),
+                    java.nio.file.Paths.get(lastGeneratedFile)
+                ).setVisible(true);
+            }
         });
 
         return p;
@@ -830,6 +863,22 @@ public class GeneratorPanel extends JPanel {
                         "Tabellenübersicht:\n" +
                         buildSummary(finalFilteredCounts)
                     );
+
+                    // SQL-Vorschau laden
+                    try {
+                        String sql = new String(java.nio.file.Files.readAllBytes(
+                            java.nio.file.Paths.get(filename)));
+                        sqlPreviewArea.setText(sql);
+                        sqlPreviewArea.setCaretPosition(0);
+                    } catch (Exception ignored) {
+                        sqlPreviewArea.setText("(Script konnte nicht geladen werden)");
+                    }
+
+                    // Diff-Button: vorheriges Script suchen
+                    lastGeneratedFile = filename;
+                    lastPreviousFile = findPreviousScript(filename);
+                    diffBtn.setVisible(lastPreviousFile != null);
+
                     cards.show(cardPane, CARD_RESULT);
                     if (seqMappingPanel != null) seqMappingPanel.reload();
                 } catch (Exception ex) {
@@ -843,6 +892,30 @@ public class GeneratorPanel extends JPanel {
     }
 
     // ── Hilfsmethoden ─────────────────────────────────────────────────────────
+
+    /**
+     * Sucht im selben Verzeichnis nach dem neuesten Script, das VOR dem aktuellen liegt.
+     * @return Absoluter Pfad des vorherigen Scripts, oder null wenn keines existiert.
+     */
+    private String findPreviousScript(String currentFilePath) {
+        try {
+            java.nio.file.Path current = java.nio.file.Paths.get(currentFilePath);
+            java.nio.file.Path dir = current.getParent();
+            if (dir == null || !java.nio.file.Files.isDirectory(dir)) return null;
+
+            String currentName = current.getFileName().toString();
+            return java.nio.file.Files.list(dir)
+                .filter(p -> p.getFileName().toString().endsWith(".sql"))
+                .filter(p -> !p.getFileName().toString().equals(currentName))
+                .sorted(java.util.Comparator.comparing(
+                    p -> ((java.nio.file.Path) p).getFileName().toString()).reversed())
+                .findFirst()
+                .map(p -> p.toAbsolutePath().toString())
+                .orElse(null);
+        } catch (Exception e) {
+            return null;
+        }
+    }
 
     /** Leert alle Eingabefelder und setzt Preset- und Ergebnis-State zurück. */
     private void resetInputCard() {
