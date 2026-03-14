@@ -59,10 +59,10 @@ public class LauncherApp {
                 case "FlatDark":     FlatDarkLaf.setup();     break;
                 case "FlatIntelliJ": FlatIntelliJLaf.setup(); break;
                 case "FlatDarcula":  FlatDarculaLaf.setup();  break;
+                case "System":       UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); break;
                 default:             FlatLightLaf.setup();    break;
             }
         } catch (Exception e) {
-            // Fallback auf System L&F
             try { UIManager.setLookAndFeel(UIManager.getSystemLookAndFeelClassName()); }
             catch (Exception ignored) { }
         }
@@ -225,7 +225,8 @@ public class LauncherApp {
             {"FlatLight",   "Hell (Light)"},
             {"FlatDark",    "Dunkel (Dark)"},
             {"FlatIntelliJ","IntelliJ"},
-            {"FlatDarcula", "Darcula"}
+            {"FlatDarcula", "Darcula"},
+            {"System",      "Windows Classic"}
         };
 
         for (String[] t : themes) {
