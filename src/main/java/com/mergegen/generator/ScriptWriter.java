@@ -1,5 +1,6 @@
 package com.mergegen.generator;
 
+import com.mergegen.config.SubselectMappingStore;
 import com.mergegen.model.ColumnInfo;
 import com.mergegen.model.ForeignKeyRelation;
 import com.mergegen.model.TableRow;
@@ -24,6 +25,10 @@ public class ScriptWriter {
 
     private final MergeScriptGenerator mergeGenerator = new MergeScriptGenerator();
 
+    // Temporaere Felder, gesetzt pro write()-Aufruf
+    private SubselectMappingStore currentSubselectStore;
+    private Map<String, TableRow> currentSubselectRows;
+
     /**
      * Schreibt alle MERGE-Statements in eine .sql-Datei.
      *
@@ -47,7 +52,12 @@ public class ScriptWriter {
                         String nameColumn,
                         String testSuffix,
                         Map<String, List<ForeignKeyRelation>> fkRelations,
-                        boolean includeUpdate) throws IOException {
+                        boolean includeUpdate,
+                        SubselectMappingStore subselectStore,
+                        Map<String, TableRow> subselectRows) throws IOException {
+
+        this.currentSubselectStore = subselectStore;
+        this.currentSubselectRows = subselectRows != null ? subselectRows : new HashMap<>();
 
         File outputFile = prepareOutputFile(rootTable, outputDir);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
@@ -235,20 +245,34 @@ public class ScriptWriter {
                 String varName = varMap.get(mapKey);
                 if (varName != null) subs.put(colName, varName);
             } else {
-                // FK-Spalte? → Relation nachschlagen
+                // FK-Spalte? -> Relation nachschlagen
                 List<ForeignKeyRelation> rels = fkRelations.get(tableUpper);
                 if (rels == null) continue;
                 for (ForeignKeyRelation rel : rels) {
                     if (!rel.getFkColumn().equalsIgnoreCase(colName)) continue;
-                    // Ist der Parent sequence-gemappt?
                     String parentTable  = rel.getParentTable().toUpperCase();
                     String parentPkCol  = rel.getParentPkColumn().toUpperCase();
+
+                    // 1. Sequence-Variable des Parent-PKs?
                     String parentSeqKey = parentTable + "." + parentPkCol;
-                    if (!sequenceMap.containsKey(parentSeqKey)) continue;
-                    // Variable des Parent-PKs suchen
-                    String mapKey  = parentTable + "." + parentPkCol + "#" + colVal;
-                    String varName = varMap.get(mapKey);
-                    if (varName != null) subs.put(colName, varName);
+                    if (sequenceMap.containsKey(parentSeqKey)) {
+                        String mapKey  = parentTable + "." + parentPkCol + "#" + colVal;
+                        String varName = varMap.get(mapKey);
+                        if (varName != null) subs.put(colName, varName);
+                        break;
+                    }
+
+                    // 2. Subselect-Mapping fuer Parent-Tabelle?
+                    if (currentSubselectStore != null && currentSubselectStore.hasMapping(parentTable)) {
+                        TableRow refRow = currentSubselectRows.get(parentTable + "#" + colVal);
+                        if (refRow != null) {
+                            String subselect = currentSubselectStore.buildSubselect(parentTable, refRow.getValues());
+                            if (subselect != null) {
+                                subs.put(colName, subselect);
+                                break;
+                            }
+                        }
+                    }
                     break;
                 }
             }
@@ -331,7 +355,12 @@ public class ScriptWriter {
                                   String nameColumn,
                                   String testSuffix,
                                   Map<String, List<ForeignKeyRelation>> fkRelations,
-                                  boolean includeUpdate) throws IOException {
+                                  boolean includeUpdate,
+                                  SubselectMappingStore subselectStore,
+                                  Map<String, TableRow> subselectRows) throws IOException {
+
+        this.currentSubselectStore = subselectStore;
+        this.currentSubselectRows = subselectRows != null ? subselectRows : new HashMap<>();
 
         File outputFile = prepareOutputFile(rootTable, outputDir);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));

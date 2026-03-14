@@ -136,7 +136,7 @@ class ScriptWriterTest {
             List.of(row), Map.of("AUFTRAG", 1),
             "AUFTRAG", List.of("42"),
             tempDir.toString(),
-            new HashMap<>(), null, null, null, false);
+            new HashMap<>(), null, null, null, false, null, null);
 
         String content = Files.readString(Path.of(path));
         assertTrue(content.contains("MERGE INTO AUFTRAG"), "MERGE fehlt");
@@ -155,7 +155,7 @@ class ScriptWriterTest {
             List.of(row), Map.of("AUFTRAG", 1),
             "AUFTRAG", List.of("42"),
             tempDir.toString(),
-            seqMap, null, null, new HashMap<>(), false);
+            seqMap, null, null, new HashMap<>(), false, null, null);
 
         String content = Files.readString(Path.of(path));
         assertTrue(content.contains("DECLARE"), "DECLARE fehlt");
@@ -182,7 +182,7 @@ class ScriptWriterTest {
             List.of(numRow, strRow), counts,
             "TAB_NUM", List.of("42"),
             tempDir.toString(),
-            seqMap, null, null, new HashMap<>(), false);
+            seqMap, null, null, new HashMap<>(), false, null, null);
 
         String content = Files.readString(Path.of(path));
         assertTrue(content.contains("NUMBER;"), "Numerischer PK muss NUMBER sein");
@@ -215,7 +215,7 @@ class ScriptWriterTest {
         counts.put("POSITION", 1); counts.put("DETAIL", 1);
 
         String path = writer.write(rows, counts, "PROJEKT", List.of("100"),
-            tempDir.toString(), seqMap, null, null, fkRels, false);
+            tempDir.toString(), seqMap, null, null, fkRels, false, null, null);
 
         String content = Files.readString(Path.of(path));
 
@@ -254,7 +254,7 @@ class ScriptWriterTest {
         counts.put("PROJEKT", 2); counts.put("AUFTRAG", 2);
 
         String path = writer.write(rows, counts, "PROJEKT", List.of("100", "101"),
-            tempDir.toString(), seqMap, null, null, fkRels, false);
+            tempDir.toString(), seqMap, null, null, fkRels, false, null, null);
 
         String content = Files.readString(Path.of(path));
 
@@ -275,7 +275,7 @@ class ScriptWriterTest {
             List.of(row), Map.of("AUFTRAG", 1),
             "AUFTRAG", List.of("42"),
             tempDir.toString(),
-            new HashMap<>(), null, null, null, false);
+            new HashMap<>(), null, null, null, false, null, null);
 
         assertTrue(path.contains("AUFTRAG"), "Unterordner muss Tabellenname enthalten");
         assertTrue(path.endsWith("MERGE_AUFTRAG.sql"), "Dateiname falsch");
@@ -295,7 +295,7 @@ class ScriptWriterTest {
         counts.put("POSITION", 1);
 
         String path = writer.write(rows, counts, "AUFTRAG", List.of("42"),
-            tempDir.toString(), new HashMap<>(), null, null, null, false);
+            tempDir.toString(), new HashMap<>(), null, null, null, false, null, null);
 
         String content = Files.readString(Path.of(path));
         assertTrue(content.contains("v_root_count NUMBER := 0"), "Skip-Variable fehlt");
@@ -318,7 +318,7 @@ class ScriptWriterTest {
             List.of(row), Map.of("AUFTRAG", 1),
             "AUFTRAG", List.of("42"),
             tempDir.toString(),
-            new HashMap<>(), null, null, null, false);
+            new HashMap<>(), null, null, null, false, null, null);
 
         String content = Files.readString(Path.of(path));
         assertFalse(content.contains("v_root_count"), "Ohne Children kein Skip-Check");
@@ -336,7 +336,7 @@ class ScriptWriterTest {
         counts.put("POSITION", 1);
 
         String path = writer.write(rows, counts, "AUFTRAG", List.of("42"),
-            tempDir.toString(), new HashMap<>(), null, null, null, true);
+            tempDir.toString(), new HashMap<>(), null, null, null, true, null, null);
 
         String content = Files.readString(Path.of(path));
         assertFalse(content.contains("v_root_count"), "Bei UPDATE-Modus kein Skip-Check");

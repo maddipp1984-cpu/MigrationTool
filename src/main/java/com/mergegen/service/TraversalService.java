@@ -35,8 +35,15 @@ public class TraversalService {
 
     private static final Path LOG_FILE = Paths.get("config", "mergegen", "traversal.log");
 
+    /** Ergebnis der Traversal-Entscheidung. */
+    public enum TraversalDecision {
+        TRAVERSE,    // ja, traversieren
+        SKIP,        // nein, ueberspringen
+        SUBSELECT    // nicht traversieren, aber FK durch Subselect ersetzen
+    }
+
     /**
-     * Callback-Interface: Fragt den Benutzer, ob eine FK-Beziehung traversiert werden soll.
+     * Callback-Interface: Fragt den Benutzer, wie eine FK-Beziehung behandelt werden soll.
      * Wird aus dem Hintergrundthread aufgerufen – Implementierung muss thread-safe sein.
      */
     @FunctionalInterface
@@ -46,9 +53,9 @@ public class TraversalService {
          * @param targetTable  Zieltabelle der FK-Beziehung
          * @param fkColumn     FK-Spalte
          * @param rowCount     Anzahl gefundener Zeilen
-         * @return true wenn traversiert werden soll
+         * @return TraversalDecision (TRAVERSE, SKIP oder SUBSELECT)
          */
-        boolean shouldTraverse(String sourceTable, String targetTable, String fkColumn, int rowCount);
+        TraversalDecision decide(String sourceTable, String targetTable, String fkColumn, int rowCount);
     }
 
     /** Typsicherer Queue-Eintrag für die BFS-Traversal. */
@@ -185,9 +192,11 @@ public class TraversalService {
         Set<String>          visited     = new HashSet<>();
         // fkRelations: Key = Child-Tabellenname, Value = alle FK-Relationen dieser Child-Tabelle
         Map<String, List<ForeignKeyRelation>> fkRelations = new HashMap<>();
-        // PK-Cache: vermeidet mehrfache SQL-Abfragen für dieselbe Tabelle
+        // PK-Cache: vermeidet mehrfache SQL-Abfragen fuer dieselbe Tabelle
         Map<String, List<String>> pkCache = new HashMap<>();
         pkCache.put(rootTable.toUpperCase(), pkCols);
+        // subselectRows: Referenz-Zeilen fuer Subselect-Ersetzung (TABLE#PK_VALUE -> Row)
+        Map<String, TableRow> subselectRows = new HashMap<>();
 
         DependencyNode rootNode = new DependencyNode(rootTable, lookupColumn, rootValueLiteral, 1);
         String rootLabel = extractLabel(rootRow, pkCols);
@@ -230,10 +239,21 @@ public class TraversalService {
             if (refRows.isEmpty()) continue;
             log("    " + refRows.size() + " Zeile(n) gefunden");
 
-            // Traversal-Regel prüfen: soll diese ausgehende FK-Beziehung verfolgt werden?
-            if (!shouldTraverseRelation(rootTable, rel.getParentTable(),
-                    rel.getFkColumn(), refRows.size())) {
-                log("    → Übersprungen (Traversal-Regel)");
+            // Traversal-Regel pruefen: soll diese ausgehende FK-Beziehung verfolgt werden?
+            TraversalDecision decision = getTraversalDecision(rootTable, rel.getParentTable(),
+                    rel.getFkColumn(), refRows.size());
+            if (decision == TraversalDecision.SUBSELECT) {
+                log("    -> Subselect (Referenz-Zeilen gespeichert)");
+                List<String> refPkColsSub = getCachedPkColumns(rel.getParentTable(), pkCache);
+                String refPkColSub = refPkColsSub.isEmpty() ? rel.getParentPkColumn() : refPkColsSub.get(0);
+                for (TableRow refRow : refRows) {
+                    String refPkValue = refRow.getPkRawValue(refPkColSub);
+                    subselectRows.put(rel.getParentTable().toUpperCase() + "#" + refPkValue, refRow);
+                }
+                continue;
+            }
+            if (decision == TraversalDecision.SKIP) {
+                log("    -> Uebersprungen (Traversal-Regel)");
                 continue;
             }
 
@@ -297,10 +317,21 @@ public class TraversalService {
             if (childRows.isEmpty()) continue;
             log("    " + childRows.size() + " Zeile(n) gefunden");
 
-            // Traversal-Regel prüfen
-            if (!shouldTraverseRelation(rootTable, rel.getChildTable(),
-                    rel.getFkColumn(), childRows.size())) {
-                log("    → Übersprungen (Traversal-Regel)");
+            // Traversal-Regel pruefen
+            TraversalDecision decisionChild = getTraversalDecision(rootTable, rel.getChildTable(),
+                    rel.getFkColumn(), childRows.size());
+            if (decisionChild == TraversalDecision.SUBSELECT) {
+                log("    -> Subselect (Referenz-Zeilen gespeichert)");
+                List<String> childPkColsSub = getCachedPkColumns(rel.getChildTable(), pkCache);
+                String childPkColSub = childPkColsSub.isEmpty() ? rel.getFkColumn() : childPkColsSub.get(0);
+                for (TableRow childRow : childRows) {
+                    String childPkValue = childRow.getPkRawValue(childPkColSub);
+                    subselectRows.put(rel.getChildTable().toUpperCase() + "#" + childPkValue, childRow);
+                }
+                continue;
+            }
+            if (decisionChild == TraversalDecision.SKIP) {
+                log("    -> Uebersprungen (Traversal-Regel)");
                 continue;
             }
 
@@ -382,10 +413,21 @@ public class TraversalService {
                 if (childRows.isEmpty()) continue;
                 log("    " + childRows.size() + " Zeile(n) gefunden");
 
-                // Traversal-Regel prüfen: soll diese FK-Beziehung verfolgt werden?
-                if (!shouldTraverseRelation(currentTable, rel.getChildTable(),
-                        rel.getFkColumn(), childRows.size())) {
-                    log("    → Übersprungen (Traversal-Regel)");
+                // Traversal-Regel pruefen: soll diese FK-Beziehung verfolgt werden?
+                TraversalDecision bfsDecision = getTraversalDecision(currentTable, rel.getChildTable(),
+                        rel.getFkColumn(), childRows.size());
+                if (bfsDecision == TraversalDecision.SUBSELECT) {
+                    log("    -> Subselect (Referenz-Zeilen gespeichert)");
+                    List<String> bfsPkCols = getCachedPkColumns(rel.getChildTable(), pkCache);
+                    String bfsPkCol = bfsPkCols.isEmpty() ? rel.getFkColumn() : bfsPkCols.get(0);
+                    for (TableRow childRow : childRows) {
+                        String bfsPkValue = childRow.getPkRawValue(bfsPkCol);
+                        subselectRows.put(rel.getChildTable().toUpperCase() + "#" + bfsPkValue, childRow);
+                    }
+                    continue;
+                }
+                if (bfsDecision == TraversalDecision.SKIP) {
+                    log("    -> Uebersprungen (Traversal-Regel)");
                     continue;
                 }
 
@@ -425,7 +467,7 @@ public class TraversalService {
             }
         }
 
-        return new TraversalResult(rootNode, sorted, tableCounts, fkRelations);
+        return new TraversalResult(rootNode, sorted, tableCounts, fkRelations, subselectRows);
     }
 
     /**
@@ -571,26 +613,32 @@ public class TraversalService {
     }
 
     /**
-     * Prüft ob eine FK-Beziehung traversiert werden soll.
-     * Priorität: 1. gespeicherte Regel → 2. Decider-Callback (Benutzerdialog) → 3. ja
+     * Prueft wie eine FK-Beziehung behandelt werden soll.
+     * Prioritaet: 1. gespeicherte Regel -> 2. Decider-Callback (Benutzerdialog) -> 3. TRAVERSE
      */
-    private boolean shouldTraverseRelation(String parentTable, String childTable,
-                                            String fkColumn, int rowCount) {
+    private TraversalDecision getTraversalDecision(String parentTable, String childTable,
+                                                    String fkColumn, int rowCount) {
         // 1. Gespeicherte Regel vorhanden?
         if (ruleStore != null && ruleStore.hasRule(parentTable, childTable, fkColumn)) {
-            boolean result = ruleStore.shouldTraverse(parentTable, childTable, fkColumn);
-            log("    Regel: " + parentTable + " → " + childTable + "." + fkColumn
-                + " = " + (result ? "JA" : "NEIN"));
-            return result;
+            TraversalRuleStore.TraversalRule rule = ruleStore.getRule(parentTable, childTable, fkColumn);
+            TraversalDecision decision;
+            switch (rule) {
+                case TRAVERSE:  decision = TraversalDecision.TRAVERSE;  break;
+                case SUBSELECT: decision = TraversalDecision.SUBSELECT; break;
+                default:        decision = TraversalDecision.SKIP;      break;
+            }
+            log("    Regel: " + parentTable + " -> " + childTable + "." + fkColumn
+                + " = " + decision);
+            return decision;
         }
 
         // 2. Decider-Callback (Benutzerdialog)?
         if (decider != null) {
-            return decider.shouldTraverse(parentTable, childTable, fkColumn, rowCount);
+            return decider.decide(parentTable, childTable, fkColumn, rowCount);
         }
 
-        // 3. Kein Store, kein Decider → traversieren
-        return true;
+        // 3. Kein Store, kein Decider -> traversieren
+        return TraversalDecision.TRAVERSE;
     }
 
     /**

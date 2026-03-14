@@ -5,6 +5,7 @@ import com.mergegen.config.AppSettings;
 import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
+import com.mergegen.config.SubselectMappingStore;
 import com.mergegen.config.TableHistoryStore;
 import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.VirtualFkStore;
@@ -88,6 +89,7 @@ public class GeneratorPanel extends JPanel {
     private final ConstantTableStore constTableStore;
     private final QueryPresetStore presetStore;
     private final TableHistoryStore historyStore;
+    private final SubselectMappingStore subselectStore;
 
     // Verlauf-Seitenleiste (CARD_INPUT)
     private final JList<TableHistoryEntry> historyList      = new JList<>(new DefaultListModel<>());
@@ -107,7 +109,8 @@ public class GeneratorPanel extends JPanel {
                           TraversalRuleStore ruleStore,
                           SequenceMappingStore seqStore, ConstantTableStore constTableStore,
                           QueryPresetStore presetStore,
-                          TableHistoryStore historyStore) {
+                          TableHistoryStore historyStore,
+                          SubselectMappingStore subselectStore) {
         this.settingsPanel   = settingsPanel;
         this.virtualFkStore  = virtualFkStore;
         this.ruleStore       = ruleStore;
@@ -115,6 +118,7 @@ public class GeneratorPanel extends JPanel {
         this.constTableStore = constTableStore;
         this.presetStore     = presetStore;
         this.historyStore    = historyStore;
+        this.subselectStore  = subselectStore;
         setLayout(new BorderLayout());
         // Alle drei Karten registrieren; sichtbar ist anfangs nur CARD_INPUT
         cardPane.add(buildInputCard(),  CARD_INPUT);
@@ -346,7 +350,7 @@ public class GeneratorPanel extends JPanel {
                     SchemaAnalyzer   analyzer = new SchemaAnalyzer(conn.get(), config);
                     TraversalService service  = new TraversalService(analyzer, virtualFkStore, ruleStore);
                     service.setLogger(this::publish);
-                    service.setDecider(GeneratorPanel.this::askTraversalDecision);
+                    service.setDecider(GeneratorPanel.this::askTraversalDecisionEnum);
 
                     List<TraversalResult> results = new java.util.ArrayList<>();
                     for (int i = 0; i < values.size(); i++) {
@@ -770,7 +774,9 @@ public class GeneratorPanel extends JPanel {
                         finalNameColumn,
                         finalTestSuffix,
                         lastResult.getFkRelations(),
-                        finalIncludeUpdate);
+                        finalIncludeUpdate,
+                        subselectStore,
+                        lastResult.getSubselectRows());
                 } else {
                     return writer.write(
                         finalFilteredRows,
@@ -781,7 +787,9 @@ public class GeneratorPanel extends JPanel {
                         finalNameColumn,
                         finalTestSuffix,
                         lastResult.getFkRelations(),
-                        finalIncludeUpdate);
+                        finalIncludeUpdate,
+                        subselectStore,
+                        lastResult.getSubselectRows());
                 }
             }
 
@@ -1021,7 +1029,9 @@ public class GeneratorPanel extends JPanel {
                     seqMap,
                     lastColumn, "",
                     lastResult.getFkRelations(),
-                    includeUpdate);
+                    includeUpdate,
+                    subselectStore,
+                    lastResult.getSubselectRows());
             }
 
             @Override
@@ -1034,37 +1044,103 @@ public class GeneratorPanel extends JPanel {
 
     /**
      * Wird aus dem Hintergrundthread aufgerufen (TraversalDecider-Callback).
-     * Zeigt einen Dialog auf dem EDT und wartet auf die Antwort.
+     * Zeigt einen Dialog auf dem EDT mit 3 Optionen und wartet auf die Antwort.
      * Bei "Entscheidung merken" wird die Regel im Store gespeichert.
      */
-    private boolean askTraversalDecision(String parentTable, String childTable,
-                                          String fkColumn, int rowCount) {
-        final boolean[] result = {true};
+    private TraversalService.TraversalDecision askTraversalDecisionEnum(
+            String parentTable, String childTable, String fkColumn, int rowCount) {
+        final TraversalService.TraversalDecision[] result = {TraversalService.TraversalDecision.TRAVERSE};
         try {
             javax.swing.SwingUtilities.invokeAndWait(() -> {
                 Object[] message = {
                     "FK-Beziehung gefunden:",
-                    parentTable + " → " + childTable + "." + fkColumn,
+                    parentTable + " \u2192 " + childTable + "." + fkColumn,
                     rowCount + " Zeile(n) gefunden.",
                     " ",
-                    "Soll diese Beziehung traversiert werden?",
+                    "Wie soll diese Beziehung behandelt werden?",
                     "(Entscheidung wird beim Preset-Speichern gesichert)"
                 };
-                int choice = JOptionPane.showConfirmDialog(
+                String[] options = {"Traversieren", "Ueberspringen", "Subselect"};
+                int choice = JOptionPane.showOptionDialog(
                     GeneratorPanel.this, message,
                     "Traversal-Entscheidung",
-                    JOptionPane.YES_NO_OPTION,
-                    JOptionPane.QUESTION_MESSAGE);
-                result[0] = (choice == JOptionPane.YES_OPTION);
-                ruleStore.setRule(parentTable, childTable, fkColumn, result[0]);
-                if (!result[0]) {
+                    JOptionPane.DEFAULT_OPTION,
+                    JOptionPane.QUESTION_MESSAGE,
+                    null, options, options[0]);
+
+                TraversalRuleStore.TraversalRule rule;
+                if (choice == 2) {
+                    // Subselect: Spaltenauswahl-Dialog anzeigen
+                    result[0] = TraversalService.TraversalDecision.SUBSELECT;
+                    rule = TraversalRuleStore.TraversalRule.SUBSELECT;
+                    askSubselectColumns(childTable);
+                } else if (choice == 1) {
+                    result[0] = TraversalService.TraversalDecision.SKIP;
+                    rule = TraversalRuleStore.TraversalRule.SKIP;
                     constTableStore.add(childTable);
+                } else {
+                    result[0] = TraversalService.TraversalDecision.TRAVERSE;
+                    rule = TraversalRuleStore.TraversalRule.TRAVERSE;
                 }
+                ruleStore.setRule(parentTable, childTable, fkColumn, rule);
             });
         } catch (Exception e) {
             // Bei Fehler: traversieren
         }
         return result[0];
+    }
+
+    /**
+     * Zeigt einen Dialog zur Auswahl der Lookup-Spalten fuer das Subselect.
+     * Laedt die Spalten der Tabelle und laesst den User die Lookup-Spalten waehlen.
+     */
+    private void askSubselectColumns(String table) {
+        try {
+            var config = settingsPanel.getCurrentConfig();
+            try (DatabaseConnection conn = new DatabaseConnection(config)) {
+                SchemaAnalyzer tempAnalyzer = new SchemaAnalyzer(conn.get(), config);
+                List<String> pkCols = tempAnalyzer.getPrimaryKeyColumns(table);
+                List<ColumnInfo> allCols = tempAnalyzer.getColumns(table, pkCols);
+
+                // Nur Nicht-PK-Spalten als Lookup-Kandidaten anbieten
+                List<String> candidates = new java.util.ArrayList<>();
+                for (ColumnInfo col : allCols) {
+                    if (!col.isPrimaryKey()) candidates.add(col.getName());
+                }
+
+                if (candidates.isEmpty()) {
+                    JOptionPane.showMessageDialog(this,
+                        "Keine Nicht-PK-Spalten in " + table + " gefunden.",
+                        "Subselect", JOptionPane.WARNING_MESSAGE);
+                    return;
+                }
+
+                JList<String> colList = new JList<>(candidates.toArray(new String[0]));
+                colList.setSelectionMode(javax.swing.ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
+                colList.setSelectedIndex(0);
+                JScrollPane scrollPane = new JScrollPane(colList);
+                scrollPane.setPreferredSize(new java.awt.Dimension(300, 200));
+
+                Object[] dialogContent = {
+                    "Lookup-Spalte(n) fuer Subselect auf " + table + " waehlen:",
+                    "Diese Spalten werden im WHERE des Subselects verwendet.",
+                    scrollPane
+                };
+
+                int ok = JOptionPane.showConfirmDialog(this, dialogContent,
+                    "Subselect-Spalten", JOptionPane.OK_CANCEL_OPTION);
+
+                if (ok == JOptionPane.OK_OPTION && !colList.isSelectionEmpty()) {
+                    List<String> selectedCols = colList.getSelectedValuesList();
+                    String pkCol = pkCols.isEmpty() ? "ID" : pkCols.get(0);
+                    subselectStore.add(table, pkCol, selectedCols);
+                }
+            }
+        } catch (Exception e) {
+            JOptionPane.showMessageDialog(this,
+                "Fehler beim Laden der Spalten: " + e.getMessage(),
+                "Subselect", JOptionPane.ERROR_MESSAGE);
+        }
     }
 
     /** Erstellt einen GridBagConstraints-Helfer mit voreingestellten Abständen. */
