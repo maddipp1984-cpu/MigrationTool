@@ -10,6 +10,7 @@ sourceCompatibility = '11'
 targetCompatibility = '11'
 compileJava.options.encoding     = 'UTF-8'
 compileTestJava.options.encoding = 'UTF-8'
+tasks.withType(JavaCompile).configureEach { options.encoding = 'UTF-8' }
 
 application {
     mainClass = 'com.migrationtool.launcher.LauncherApp'
@@ -28,6 +29,27 @@ dependencies {
 }
 
 tasks.named('test') {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+        showStandardStreams = true
+    }
+}
+
+// ── Integration-Tests (eigenes Source-Set, braucht laufende Oracle-DB) ────────
+sourceSets {
+    integrationTest {
+        java.srcDir 'src/integrationTest/java'
+        compileClasspath += sourceSets.main.output + configurations.testCompileClasspath
+        runtimeClasspath += sourceSets.main.output + configurations.testRuntimeClasspath
+    }
+}
+
+tasks.register('integrationTest', Test) {
+    description = 'Startet Integration-Tests gegen Oracle XE (Docker)'
+    group = 'verification'
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
     useJUnitPlatform()
     testLogging {
         events 'passed', 'failed', 'skipped'

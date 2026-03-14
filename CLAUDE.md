@@ -86,6 +86,9 @@ MigrationTool/
 - Nach dem Laden der Root-Row wird stets der echte PK-Wert für den BFS-Traversal verwendet
 - `TraversalService(SchemaAnalyzer, VirtualFkStore)` – beide Pflicht; `VirtualFkStore` kann null sein
 - **Composite PKs**: `visited`-Key aus allen PK-Spalten zusammengesetzt (`buildVisitedKey()`)
+- **Traversal-Entscheidung** (3 Optionen): `TraversalDecision.TRAVERSE` / `SKIP` / `SUBSELECT`
+  - SUBSELECT: Tabelle wird nicht traversiert, aber FK-Werte im Script durch Subselect ersetzt
+  - Referenz-Zeilen werden in `TraversalResult.subselectRows` gespeichert
 
 ### Virtuelle FKs (`VirtualFkStore`)
 - Datei: `virtual-fks.txt`, Format: `CHILD|FK_COL|PARENT|PARENT_PK`
@@ -128,6 +131,13 @@ MigrationTool/
 - MERGE matcht nie → immer INSERT → jeder Testlauf legt neues Objekt an
 - Voraussetzung: Spaltenname muss ausgefüllt sein
 
+### Subselect-FK-Mapping (`SubselectMappingStore`)
+- Datei: `subselect-mappings.txt`, Format: `TABLE|PK_COL|LOOKUP_COL1;LOOKUP_COL2`
+- Ersetzt FK-Werte im MERGE-Script durch `(SELECT pk FROM tabelle WHERE key = wert)`
+- Für Referenzdaten die auf der Ziel-DB bereits existieren aber andere IDs haben
+- Prioritätskette im USING-SELECT: ColVar > Sequence > **Subselect** > Literal
+- GUI: dritter Button "Subselect" im Traversal-Dialog + Spaltenauswahl-Dialog
+
 ### MERGE-Generierung & PK-Werte
 - PK-Spalten mit Sequence: `SEQ.NEXTVAL` im USING-SELECT statt Quell-PK-Wert
 - **Optional UPDATE**: Checkbox „Bei Übereinstimmung aktualisieren" → `WHEN MATCHED THEN UPDATE SET` für alle Nicht-PK-Spalten (Sequence/ColVar-Spalten ausgenommen)
@@ -142,11 +152,13 @@ MigrationTool/
 - Drei Felder: Führende Tabelle | Spaltenname (optional, leer = PK auto) | Wert
 - Letzte Tabelle + Spalte werden in `app.properties` gespeichert und beim nächsten Start vorausgefüllt
 
-### Unit-Tests (50 Tests, keine DB nötig)
+### Unit-Tests (61 Tests, keine DB nötig)
 - **MergeScriptGeneratorTest** (12): MERGE-SQL-Struktur, Sequence-Ersetzung, Prioritätskette (ColVar > Seq > Literal), Testmodus-Suffix, ON-Klausel, UPDATE-Block
+- **SubselectGeneratorTest** (3): Subselect-Ersetzung im USING-SELECT, Priorität ColVar > Subselect, Original-Literal ohne Subselect
 - **ScriptWriterTest** (16): `buildVarName` (30-Zeichen-Limit), `buildColVarSubstitutions`, Plain vs. PL/SQL-Mode, Typ-Erkennung, 4-Ebenen-FK-Kette, 2-Root-Rows, Skip-Check
 - **TraversalServiceTest** (12): `toSqlLiteral()` – Zahlen, Strings, Escaping, Null/Blank
 - **TableHistoryStoreTest** (10): Duplikat-Erkennung, Move-to-Front, Timestamp-Update, Persistenz-Roundtrip
+- **SubselectMappingStoreTest** (8): Add/Get, Composite-Lookup, Case-Insensitiv, Remove, Persistenz-Roundtrip, buildSubselect
 - Refactoring für Testbarkeit: `ScriptWriter.buildVarName()` + `buildColVarSubstitutions()` sind package-private; `TableHistoryStore` hat zweiten Konstruktor mit `baseDir`-Parameter
 
 ---
@@ -226,6 +238,7 @@ config/
 │   ├── virtual-fks.txt          – Manuelle FK-Definitionen
 │   ├── sequence-mappings.txt    – Sequence-Zuordnungen
 │   ├── constant-tables.txt      – Konstantentabellen (kein MERGE)
+│   ├── subselect-mappings.txt   – Subselect-FK-Mappings (TABLE|PK|LOOKUP_COLS)
 │   ├── query-presets.txt        – Gespeicherte Abfragen
 │   └── table-history.txt        – Analyse-Verlauf
 ├── excelsplit/
