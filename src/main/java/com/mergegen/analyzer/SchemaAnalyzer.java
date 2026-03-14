@@ -401,4 +401,19 @@ public class SchemaAnalyzer {
     public String getRawPkValue(TableRow row, String pkColumn) {
         return row.getPkRawValue(pkColumn);
     }
+
+    /**
+     * Prüft ob in der angegebenen Tabelle ein Datensatz mit dem gegebenen Spaltenwert existiert.
+     * Der Wert wird als SQL-Literal formatiert (Zahlen ohne, Strings mit Anführungszeichen).
+     */
+    public boolean existsRow(String table, String column, String value) throws SQLException {
+        String literal = com.mergegen.service.TraversalService.toSqlLiteral(value);
+        String sql = "SELECT 1 FROM " + schema + "." + table
+                   + " WHERE " + column + " = " + literal
+                   + " AND ROWNUM = 1";
+        try (PreparedStatement ps = connection.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            return rs.next();
+        }
+    }
 }

@@ -6,11 +6,9 @@ import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.SubselectMappingStore;
-import com.mergegen.config.TableHistoryStore;
 import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.VirtualFkStore;
 import com.mergegen.model.QueryPreset;
-import com.mergegen.model.TableHistoryEntry;
 import com.mergegen.db.DatabaseConnection;
 import com.mergegen.generator.ScriptWriter;
 import com.mergegen.model.ColumnInfo;
@@ -89,13 +87,7 @@ public class GeneratorPanel extends JPanel {
     private final SequenceMappingStore seqStore;
     private final ConstantTableStore constTableStore;
     private final QueryPresetStore presetStore;
-    private final TableHistoryStore historyStore;
     private final SubselectMappingStore subselectStore;
-
-    // Verlauf-Seitenleiste (CARD_INPUT)
-    private final JList<TableHistoryEntry> historyList      = new JList<>(new DefaultListModel<>());
-    // Zuletzt selektierter Verlaufseintrag – null wenn nichts selektiert oder Tabelle/Spalte geändert
-    private       TableHistoryEntry        activeHistoryEntry = null;
 
     // Preset-Steuerung (CARD_INPUT)
     private final JComboBox<String> presetCombo     = new JComboBox<>();
@@ -110,7 +102,6 @@ public class GeneratorPanel extends JPanel {
                           TraversalRuleStore ruleStore,
                           SequenceMappingStore seqStore, ConstantTableStore constTableStore,
                           QueryPresetStore presetStore,
-                          TableHistoryStore historyStore,
                           SubselectMappingStore subselectStore) {
         this.settingsPanel   = settingsPanel;
         this.virtualFkStore  = virtualFkStore;
@@ -118,7 +109,6 @@ public class GeneratorPanel extends JPanel {
         this.seqStore        = seqStore;
         this.constTableStore = constTableStore;
         this.presetStore     = presetStore;
-        this.historyStore    = historyStore;
         this.subselectStore  = subselectStore;
         setLayout(new BorderLayout());
         // Alle drei Karten registrieren; sichtbar ist anfangs nur CARD_INPUT
@@ -127,7 +117,6 @@ public class GeneratorPanel extends JPanel {
         cardPane.add(buildResultCard(), CARD_RESULT);
         add(cardPane, BorderLayout.CENTER);
         refreshPresetCombo();
-        refreshHistoryList();
 
         // Letzte Eingaben aus app.properties vorbelegen
         String savedTable  = appSettings.getLastTable();
@@ -250,68 +239,8 @@ public class GeneratorPanel extends JPanel {
         analyzeBtn.addActionListener(e -> startAnalysis());
         newInputBtn.addActionListener(e -> resetInputCard());
 
-        // ── Verlauf-Seitenleiste (WEST im SplitPane) ─────────────────────────
-        historyList.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
-        historyList.setCellRenderer(new HistoryListRenderer());
-        historyList.addListSelectionListener(e -> {
-            if (e.getValueIsAdjusting()) return;
-            TableHistoryEntry selected = historyList.getSelectedValue();
-            if (selected == null) return;
-            // Felder mit Verlaufseintrag befüllen
-            tableField.setText(selected.getTable());
-            columnField.setText(selected.getColumn());
-            valueArea.setText(String.join("\n", selected.getValues()));
-            // Aktiven Eintrag merken – bei erneuter Analyse wird dieser aktualisiert
-            activeHistoryEntry = selected;
-        });
-
-        JButton removeHistoryBtn = new JButton("Entfernen");
-        removeHistoryBtn.addActionListener(e -> {
-            TableHistoryEntry selected = historyList.getSelectedValue();
-            if (selected == null) return;
-            historyStore.remove(selected);
-            refreshHistoryList();
-        });
-
-        historyList.setToolTipText(
-                "<html>Automatisch gespeicherte Eingaben früherer Analysen.<br>"
-                + "Klick auf einen Eintrag füllt die Eingabefelder.<br>"
-                + "Die Analyse muss erneut ausgeführt werden –<br>"
-                + "Abhängigkeiten werden nicht gespeichert.</html>");
-        removeHistoryBtn.setToolTipText("Markierten Verlaufseintrag löschen");
-
-        JPanel historyPanel = new JPanel(new BorderLayout(0, 4));
-        historyPanel.setBorder(javax.swing.BorderFactory.createTitledBorder("Verlauf"));
-        historyPanel.add(new JScrollPane(historyList), BorderLayout.CENTER);
-        JPanel removeBtnRow = new JPanel(new FlowLayout(FlowLayout.LEFT, 0, 0));
-        removeBtnRow.add(removeHistoryBtn);
-        historyPanel.add(removeBtnRow, BorderLayout.SOUTH);
-        historyPanel.setPreferredSize(new Dimension(200, 0));
-
-        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, historyPanel, p);
-        splitPane.setDividerLocation(200);
-        splitPane.setResizeWeight(0.0);
-
-        card.add(splitPane, BorderLayout.CENTER);
+        card.add(p, BorderLayout.CENTER);
         return card;
-    }
-
-    /** Zweizeiliger Renderer für Verlauf-Einträge. */
-    private static class HistoryListRenderer extends javax.swing.DefaultListCellRenderer {
-        @Override
-        public java.awt.Component getListCellRendererComponent(
-                JList<?> list, Object value, int index, boolean isSelected, boolean cellHasFocus) {
-            super.getListCellRendererComponent(list, value, index, isSelected, cellHasFocus);
-            if (value instanceof TableHistoryEntry) {
-                TableHistoryEntry e = (TableHistoryEntry) value;
-                String valStr = String.join(", ", e.getValues());
-                if (valStr.length() > 40) valStr = valStr.substring(0, 38) + "…";
-                String color = isSelected ? "white" : "gray";
-                setText("<html><b>" + e.getTable() + "</b><br>"
-                    + "<font color='" + color + "'>" + valStr + "</font></html>");
-            }
-            return this;
-        }
     }
 
     /** Befüllt die Preset-ComboBox neu aus dem Store. */
@@ -349,8 +278,12 @@ public class GeneratorPanel extends JPanel {
         if (table.isEmpty())  { setInputStatus("Bitte Tabellenname eingeben."); return; }
         if (values.isEmpty()) { setInputStatus("Bitte mindestens einen Wert eingeben."); return; }
 
-        // Traversal-Regeln zurücksetzen (werden im Dialog neu abgefragt)
-        ruleStore.clear();
+        // Traversal-Regeln zurücksetzen – nur wenn kein Preset aktiv ist,
+        // denn Presets bringen eigene Regeln mit (beim Auswählen geladen)
+        String activePreset = (String) presetCombo.getSelectedItem();
+        if (activePreset == null || activePreset.equals("(kein Preset)")) {
+            ruleStore.clear();
+        }
 
         setInputStatus("Analysiere...");
         analyzeBtn.setEnabled(false);
@@ -397,20 +330,13 @@ public class GeneratorPanel extends JPanel {
                     appSettings.setLastTable(table);
                     appSettings.setLastColumn(column);
                     appSettings.setLastValues(values);
-                    // Aktiven Verlaufseintrag aktualisieren (gleiche Tabelle/Spalte, ggf. neue Werte)
-                    // oder neuen Eintrag anlegen
-                    if (activeHistoryEntry != null
-                            && activeHistoryEntry.getTable().equalsIgnoreCase(table)
-                            && activeHistoryEntry.getColumn().equalsIgnoreCase(column)) {
-                        historyStore.updateEntry(activeHistoryEntry, table, column, values);
-                    } else {
-                        historyStore.addOrUpdate(new TableHistoryEntry(table, column, values));
-                    }
-                    activeHistoryEntry = null;
-                    refreshHistoryList();
                     showTreeCard(lastResult);
                 } catch (Exception ex) {
-                    setInputStatus("Fehler: " + rootCause(ex));
+                    if (isCausedBy(ex, TraversalService.TraversalCancelledException.class)) {
+                        setInputStatus("Analyse abgebrochen.");
+                    } else {
+                        setInputStatus("Fehler: " + rootCause(ex));
+                    }
                 }
             }
         };
@@ -615,6 +541,37 @@ public class GeneratorPanel extends JPanel {
     private void startGeneration() {
         if (lastResult == null) return;
         String nameColumn = columnField.getText().trim().toUpperCase();
+
+        // Sicherheitsprüfung: bei Namens-Suche ohne UPDATE prüfen ob Objekt bereits existiert
+        if (!nameColumn.isEmpty() && !updateCheck.isSelected() && lastIds != null) {
+            try {
+                var config = settingsPanel.getCurrentConfig();
+                try (DatabaseConnection conn = new DatabaseConnection(config)) {
+                    SchemaAnalyzer analyzer = new SchemaAnalyzer(conn.get(), config);
+                    List<String> existing = new ArrayList<>();
+                    for (String val : lastIds) {
+                        if (analyzer.existsRow(lastTable, nameColumn, val)) {
+                            existing.add(val);
+                        }
+                    }
+                    if (!existing.isEmpty()) {
+                        JOptionPane.showMessageDialog(this,
+                            "Folgende Objekte existieren bereits in " + lastTable + ":\n"
+                            + String.join(", ", existing)
+                            + "\n\nScript-Generierung abgebrochen."
+                            + "\nAktiviere 'Bei Übereinstimmung aktualisieren' um vorhandene Objekte zu überschreiben.",
+                            "Objekt bereits vorhanden", JOptionPane.WARNING_MESSAGE);
+                        return;
+                    }
+                }
+            } catch (Exception ex) {
+                JOptionPane.showMessageDialog(this,
+                    "Fehler bei Duplikat-Prüfung:\n" + rootCause(ex),
+                    "Fehler", JOptionPane.ERROR_MESSAGE);
+                return;
+            }
+        }
+
         String testSuffix = testModeCheck.isSelected()
             ? "_" + java.time.LocalDateTime.now()
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
@@ -850,7 +807,7 @@ public class GeneratorPanel extends JPanel {
 
     // ── Hilfsmethoden ─────────────────────────────────────────────────────────
 
-    /** Leert alle Eingabefelder und setzt Preset-, Verlaufs- und Ergebnis-State zurück. */
+    /** Leert alle Eingabefelder und setzt Preset- und Ergebnis-State zurück. */
     private void resetInputCard() {
         tableField.setText("");
         columnField.setText("");
@@ -858,17 +815,8 @@ public class GeneratorPanel extends JPanel {
         testModeCheck.setSelected(false);
         updateCheck.setSelected(false);
         presetCombo.setSelectedIndex(0);
-        historyList.clearSelection();
-        activeHistoryEntry = null;
         lastResult = null;
         setInputStatus(" ");
-    }
-
-    /** Befüllt die Verlauf-JList neu aus dem Store. */
-    private void refreshHistoryList() {
-        DefaultListModel<TableHistoryEntry> model = new DefaultListModel<>();
-        historyStore.getAll().forEach(model::addElement);
-        historyList.setModel(model);
     }
 
     /**
@@ -955,6 +903,13 @@ public class GeneratorPanel extends JPanel {
         Throwable t = ex;
         while (t.getCause() != null) t = t.getCause();
         return t.getMessage() != null ? t.getMessage() : t.getClass().getSimpleName();
+    }
+
+    private static boolean isCausedBy(Throwable ex, Class<? extends Throwable> type) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (type.isInstance(t)) return true;
+        }
+        return false;
     }
 
     // ── Workflow-Unterstützung ────────────────────────────────────────────────
@@ -1095,6 +1050,10 @@ public class GeneratorPanel extends JPanel {
                     null, options, options[0]);
 
                 TraversalRuleStore.TraversalRule rule;
+                if (choice == JOptionPane.CLOSED_OPTION) {
+                    result[0] = TraversalService.TraversalDecision.CANCEL;
+                    return;
+                }
                 if (choice == 2) {
                     // Subselect: Spaltenauswahl-Dialog anzeigen
                     boolean columnsSelected = askSubselectColumns(childTable);

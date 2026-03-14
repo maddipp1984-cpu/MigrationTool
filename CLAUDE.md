@@ -26,9 +26,9 @@ MigrationTool/
     │   │   ├── analyzer/        (SchemaAnalyzer)
     │   │   ├── service/         (TraversalService)
     │   │   ├── generator/       (MergeScriptGenerator, ScriptWriter)
-    │   │   ├── config/          (AppSettings, ConnectionProfileManager, VirtualFkStore, SequenceMappingStore, ConstantTableStore, QueryPresetStore, TableHistoryStore, DatabaseConfig)
+    │   │   ├── config/          (AppSettings, ConnectionProfileManager, VirtualFkStore, SequenceMappingStore, ConstantTableStore, QueryPresetStore, DatabaseConfig)
     │   │   ├── db/              (DatabaseConnection)
-    │   │   └── model/           (ColumnInfo, TableRow, DependencyNode, ForeignKeyRelation, SequenceMapping, TraversalResult, QueryPreset, TableHistoryEntry)
+    │   │   └── model/           (ColumnInfo, TableRow, DependencyNode, ForeignKeyRelation, SequenceMapping, TraversalResult, QueryPreset)
     │   ├── com/excelsplit/      (ExcelSplit, AppConfig, ExcelSplitService, MainPresenter, MainWindow)
     │   ├── com/kostenattribute/ (InsertGenPanel, InsertGenService)
     │   └── com/migrationtool/launcher/  (LauncherApp, HelpDialog – NUR diese beiden)
@@ -39,7 +39,7 @@ MigrationTool/
 
 ```bash
 ./gradlew test
-# → 61 Unit-Tests (MergeGen + SubselectMapping); ExcelSplit hat keine Tests
+# → 54 Unit-Tests (MergeGen + SubselectMapping); ExcelSplit hat keine Tests
 
 ./gradlew integrationTest
 # → 18 Integration-Tests gegen Oracle XE (Docker)
@@ -83,12 +83,6 @@ MigrationTool/
 - BFS: echte DB-FKs + virtuelle FKs kombiniert
 - **Auto-Bereinigung**: wenn virtueller FK inzwischen als echter Constraint in DB existiert (match auf childTable + fkColumn), wird er beim Traversal automatisch entfernt
 - Shared Instance: in `LauncherApp` erstellt, an `GeneratorPanel` und `VirtualFkPanel` weitergereicht
-
-### Analyse-Verlauf (`TableHistoryStore`)
-- Datei: `table-history.txt`, Format: `TABLE|COLUMN|VAL1;VAL2|CONST1;CONST2|TIMESTAMP`
-- UI: JList-Seitenleiste links neben Eingabeformular (JSplitPane in CARD_INPUT, 200 px)
-- Duplikat-Prüfung: gleiche Tabelle + Spalte + Werte (caseignore, reihenfolgeunabhängig) → kein neuer Eintrag, Timestamp aktualisieren + Move-to-Front
-- Speichern: beim Analysieren (Tabelle/Spalte/Werte), ergänzt beim Generieren (Konstantentabellen)
 
 ### Persistenz
 - `app.properties`: output.dir, last.table, last.column
@@ -140,14 +134,13 @@ MigrationTool/
 - Drei Felder: Führende Tabelle | Spaltenname (optional, leer = PK auto) | Wert
 - Letzte Tabelle + Spalte werden in `app.properties` gespeichert und beim nächsten Start vorausgefüllt
 
-### Unit-Tests (61 Tests, keine DB nötig)
+### Unit-Tests (54 Tests, keine DB nötig)
 - **MergeScriptGeneratorTest** (12): MERGE-SQL-Struktur, Sequence-Ersetzung, Prioritätskette (ColVar > Seq > Literal), Testmodus-Suffix, ON-Klausel, UPDATE-Block
 - **SubselectGeneratorTest** (3): Subselect-Ersetzung im USING-SELECT, Priorität ColVar > Subselect, Original-Literal ohne Subselect
 - **ScriptWriterTest** (16): `buildVarName` (30-Zeichen-Limit), `buildColVarSubstitutions`, Plain vs. PL/SQL-Mode, Typ-Erkennung, 4-Ebenen-FK-Kette, 2-Root-Rows, Skip-Check
 - **TraversalServiceTest** (12): `toSqlLiteral()` – Zahlen, Strings, Escaping, Null/Blank
-- **TableHistoryStoreTest** (10): Duplikat-Erkennung, Move-to-Front, Timestamp-Update, Persistenz-Roundtrip
 - **SubselectMappingStoreTest** (8): Add/Get, Composite-Lookup, Case-Insensitiv, Remove, Persistenz-Roundtrip, buildSubselect
-- Refactoring für Testbarkeit: `ScriptWriter.buildVarName()` + `buildColVarSubstitutions()` sind package-private; `TableHistoryStore` hat zweiten Konstruktor mit `baseDir`-Parameter
+- Refactoring für Testbarkeit: `ScriptWriter.buildVarName()` + `buildColVarSubstitutions()` sind package-private
 
 ---
 
@@ -227,8 +220,7 @@ config/
 │   ├── sequence-mappings.txt    – Sequence-Zuordnungen
 │   ├── constant-tables.txt      – Konstantentabellen (kein MERGE)
 │   ├── subselect-mappings.txt   – Subselect-FK-Mappings (TABLE|PK|LOOKUP_COLS)
-│   ├── query-presets.txt        – Gespeicherte Abfragen
-│   └── table-history.txt        – Analyse-Verlauf
+│   └── query-presets.txt        – Gespeicherte Abfragen
 ├── excelsplit/
 │   └── excel-split.properties   – masterDir, outputDir
 └── insertgen/

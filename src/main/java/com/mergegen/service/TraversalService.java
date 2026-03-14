@@ -39,7 +39,15 @@ public class TraversalService {
     public enum TraversalDecision {
         TRAVERSE,    // ja, traversieren
         SKIP,        // nein, ueberspringen
-        SUBSELECT    // nicht traversieren, aber FK durch Subselect ersetzen
+        SUBSELECT,   // nicht traversieren, aber FK durch Subselect ersetzen
+        CANCEL       // Analyse komplett abbrechen
+    }
+
+    /** Wird geworfen wenn der Benutzer die Analyse per Dialog-X abbricht. */
+    public static class TraversalCancelledException extends RuntimeException {
+        public TraversalCancelledException() {
+            super("Analyse vom Benutzer abgebrochen");
+        }
     }
 
     /**
@@ -242,6 +250,9 @@ public class TraversalService {
             // Traversal-Regel pruefen: soll diese ausgehende FK-Beziehung verfolgt werden?
             TraversalDecision decision = getTraversalDecision(rootTable, rel.getParentTable(),
                     rel.getFkColumn(), refRows.size());
+            if (decision == TraversalDecision.CANCEL) {
+                throw new TraversalCancelledException();
+            }
             if (decision == TraversalDecision.SUBSELECT) {
                 log("    -> Subselect (Referenz-Zeilen gespeichert)");
                 collectSubselectRows(rel.getParentTable(), rel.getParentPkColumn(), refRows, pkCache, subselectRows);
@@ -315,6 +326,9 @@ public class TraversalService {
             // Traversal-Regel pruefen
             TraversalDecision decisionChild = getTraversalDecision(rootTable, rel.getChildTable(),
                     rel.getFkColumn(), childRows.size());
+            if (decisionChild == TraversalDecision.CANCEL) {
+                throw new TraversalCancelledException();
+            }
             if (decisionChild == TraversalDecision.SUBSELECT) {
                 log("    -> Subselect (Referenz-Zeilen gespeichert)");
                 collectSubselectRows(rel.getChildTable(), rel.getFkColumn(), childRows, pkCache, subselectRows);
@@ -406,6 +420,9 @@ public class TraversalService {
                 // Traversal-Regel pruefen: soll diese FK-Beziehung verfolgt werden?
                 TraversalDecision bfsDecision = getTraversalDecision(currentTable, rel.getChildTable(),
                         rel.getFkColumn(), childRows.size());
+                if (bfsDecision == TraversalDecision.CANCEL) {
+                    throw new TraversalCancelledException();
+                }
                 if (bfsDecision == TraversalDecision.SUBSELECT) {
                     log("    -> Subselect (Referenz-Zeilen gespeichert)");
                     collectSubselectRows(rel.getChildTable(), rel.getFkColumn(), childRows, pkCache, subselectRows);
