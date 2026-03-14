@@ -49,26 +49,9 @@ public class ScriptWriter {
                         Map<String, List<ForeignKeyRelation>> fkRelations,
                         boolean includeUpdate) throws IOException {
 
-        // Security: Path-Traversal über Tabellennamen verhindern
-        String safeTable = rootTable.toUpperCase();
-        if (!safeTable.matches("[A-Z_$#][A-Z0-9_$#]*")) {
-            throw new IllegalArgumentException("Ungültiger Tabellenname: " + rootTable);
-        }
-
+        File outputFile = prepareOutputFile(rootTable, outputDir);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        String filename  = "MERGE_" + safeTable + ".sql";
 
-        // Unterordner pro Root-Tabelle anlegen
-        File tableDir = new File(outputDir, safeTable);
-        tableDir.mkdirs();
-
-        // Alte Scripts im Tabellenordner löschen
-        File[] oldFiles = tableDir.listFiles((d, name) -> name.endsWith(".sql"));
-        if (oldFiles != null) {
-            for (File f : oldFiles) f.delete();
-        }
-
-        File outputFile = new File(tableDir, filename);
         boolean hasChildren = orderedRows.stream()
             .anyMatch(r -> !r.getTableName().equalsIgnoreCase(rootTable));
         boolean needsSkipCheck = !includeUpdate && hasChildren;
@@ -291,6 +274,24 @@ public class ScriptWriter {
     // Hilfsmethoden
     // ─────────────────────────────────────────────────────────────────────────
 
+    /**
+     * Validiert den Tabellennamen, legt den Ausgabeordner an und löscht alte Scripts.
+     * @return die Ziel-Datei (MERGE_<TABLE>.sql)
+     */
+    private File prepareOutputFile(String rootTable, String outputDir) {
+        String safeTable = rootTable.toUpperCase();
+        if (!safeTable.matches("[A-Z_$#][A-Z0-9_$#]*")) {
+            throw new IllegalArgumentException("Ungültiger Tabellenname: " + rootTable);
+        }
+        File tableDir = new File(outputDir, safeTable);
+        tableDir.mkdirs();
+        File[] oldFiles = tableDir.listFiles((d, name) -> name.endsWith(".sql"));
+        if (oldFiles != null) {
+            for (File f : oldFiles) f.delete();
+        }
+        return new File(tableDir, "MERGE_" + safeTable + ".sql");
+    }
+
     private void writeTableHeader(BufferedWriter writer, String table, int count) throws IOException {
         writer.write("\n-- ============================================================\n");
         writer.write("-- Tabelle: " + table);
@@ -332,20 +333,8 @@ public class ScriptWriter {
                                   Map<String, List<ForeignKeyRelation>> fkRelations,
                                   boolean includeUpdate) throws IOException {
 
-        String safeTable = rootTable.toUpperCase();
-        if (!safeTable.matches("[A-Z_$#][A-Z0-9_$#]*")) {
-            throw new IllegalArgumentException("Ungültiger Tabellenname: " + rootTable);
-        }
-
+        File outputFile = prepareOutputFile(rootTable, outputDir);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
-        String filename  = "MERGE_" + safeTable + ".sql";
-
-        File tableDir = new File(outputDir, safeTable);
-        tableDir.mkdirs();
-        File[] oldFiles = tableDir.listFiles((d, name) -> name.endsWith(".sql"));
-        if (oldFiles != null) {
-            for (File f : oldFiles) f.delete();
-        }
 
         // Gesamt-Counts für Header
         Map<String, Integer> totalCounts = new LinkedHashMap<>();
@@ -355,7 +344,6 @@ public class ScriptWriter {
             totalRows += counts.values().stream().mapToInt(Integer::intValue).sum();
         }
 
-        File outputFile = new File(tableDir, filename);
         try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
             writeHeader(writer, rootTable, rootIds, totalCounts, timestamp);
 

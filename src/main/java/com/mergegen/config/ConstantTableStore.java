@@ -14,28 +14,27 @@ public class ConstantTableStore {
     private static final String FILE_NAME = "config/mergegen/constant-tables.txt";
     private static final String COMMENT   = "#";
 
-    private final List<String> entries = new ArrayList<>();
+    private final LinkedHashSet<String> entries = new LinkedHashSet<>();
 
     public ConstantTableStore() {
         load();
     }
 
-    /** Gibt eine unveränderliche Kopie aller Einträge zurück (uppercase). */
+    /** Gibt eine Liste aller Einträge zurück (uppercase, Einfügereihenfolge). */
     public List<String> getAll() {
         return Collections.unmodifiableList(new ArrayList<>(entries));
     }
 
     /** Gibt ein Set aller Einträge zurück (uppercase) – effizient für contains-Prüfung. */
     public Set<String> getAsSet() {
-        return new LinkedHashSet<>(entries);
+        return Collections.unmodifiableSet(new LinkedHashSet<>(entries));
     }
 
     /** Fügt eine Tabelle hinzu (falls nicht schon vorhanden) und speichert sofort. */
     public void add(String tableName) {
         String upper = tableName.trim().toUpperCase();
         if (upper.isEmpty()) return;
-        if (!entries.contains(upper)) {
-            entries.add(upper);
+        if (entries.add(upper)) {
             save();
         }
     }
@@ -71,10 +70,7 @@ public class ConstantTableStore {
             while ((line = reader.readLine()) != null) {
                 line = line.trim();
                 if (line.isEmpty() || line.startsWith(COMMENT)) continue;
-                String upper = line.toUpperCase();
-                if (!entries.contains(upper)) {
-                    entries.add(upper);
-                }
+                entries.add(line.toUpperCase());
             }
         } catch (IOException ex) {
             System.err.println("constant-tables.txt konnte nicht geladen werden: " + ex.getMessage());

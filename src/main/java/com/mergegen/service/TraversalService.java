@@ -42,13 +42,28 @@ public class TraversalService {
     @FunctionalInterface
     public interface TraversalDecider {
         /**
-         * @param parentTable  Tabelle, von der aus traversiert wird
-         * @param childTable   Zieltabelle der FK-Beziehung
+         * @param sourceTable  Tabelle, von der aus traversiert wird
+         * @param targetTable  Zieltabelle der FK-Beziehung
          * @param fkColumn     FK-Spalte
          * @param rowCount     Anzahl gefundener Zeilen
          * @return true wenn traversiert werden soll
          */
-        boolean shouldTraverse(String parentTable, String childTable, String fkColumn, int rowCount);
+        boolean shouldTraverse(String sourceTable, String targetTable, String fkColumn, int rowCount);
+    }
+
+    /** Typsicherer Queue-Eintrag für die BFS-Traversal. */
+    private static class QueueEntry {
+        final String tableName;
+        final String pkValue;
+        final TableRow row;
+        final DependencyNode node;
+
+        QueueEntry(String tableName, String pkValue, TableRow row, DependencyNode node) {
+            this.tableName = tableName;
+            this.pkValue   = pkValue;
+            this.row       = row;
+            this.node      = node;
+        }
     }
 
     private final SchemaAnalyzer analyzer;
@@ -170,6 +185,9 @@ public class TraversalService {
         Set<String>          visited     = new HashSet<>();
         // fkRelations: Key = Child-Tabellenname, Value = alle FK-Relationen dieser Child-Tabelle
         Map<String, List<ForeignKeyRelation>> fkRelations = new HashMap<>();
+        // PK-Cache: vermeidet mehrfache SQL-Abfragen für dieselbe Tabelle
+        Map<String, List<String>> pkCache = new HashMap<>();
+        pkCache.put(rootTable.toUpperCase(), pkCols);
 
         DependencyNode rootNode = new DependencyNode(rootTable, lookupColumn, rootValueLiteral, 1);
         String rootLabel = extractLabel(rootRow, pkCols);
@@ -192,8 +210,7 @@ public class TraversalService {
         tableCounts.merge(rootTable, 1, Integer::sum);
 
         // Referenzierte Datensätze laden und als Startpunkte für BFS verwenden
-        // Queue-Einträge: [Tabellenname, PK-Literal (erster PK), TableRow-Objekt, DependencyNode]
-        Queue<Object[]> queue = new ArrayDeque<>();
+        Queue<QueueEntry> queue = new ArrayDeque<>();
 
         for (ForeignKeyRelation rel : rootOutgoing) {
             String fkValue = rootRow.getPkRawValue(rel.getFkColumn());
@@ -220,7 +237,7 @@ public class TraversalService {
                 continue;
             }
 
-            List<String> refPkCols = analyzer.getPrimaryKeyColumns(rel.getParentTable());
+            List<String> refPkCols = getCachedPkColumns(rel.getParentTable(), pkCache);
             String refPkCol = refPkCols.isEmpty() ? rel.getParentPkColumn() : refPkCols.get(0);
 
             DependencyNode refNode = new DependencyNode(
@@ -240,7 +257,7 @@ public class TraversalService {
                 String refPkValue = refRow.getPkRawValue(refPkCol);
                 String refKey = buildVisitedKey(rel.getParentTable(), refRow, refPkCols, refPkValue);
                 if (!visited.contains(refKey)) {
-                    queue.add(new Object[]{rel.getParentTable(), refPkValue, refRow, refNode});
+                    queue.add(new QueueEntry(rel.getParentTable(), refPkValue, refRow, refNode));
                 }
             }
         }
@@ -291,7 +308,7 @@ public class TraversalService {
                 rel.getChildTable(), rel.getFkColumn(), rootPkLiteral, childRows.size());
             rootNode.addChild(childNode);
 
-            List<String> childPkCols = analyzer.getPrimaryKeyColumns(rel.getChildTable());
+            List<String> childPkCols = getCachedPkColumns(rel.getChildTable(), pkCache);
             String childPkCol = childPkCols.isEmpty() ? rel.getFkColumn() : childPkCols.get(0);
 
             for (TableRow childRow : childRows) {
@@ -304,23 +321,23 @@ public class TraversalService {
                 String childKey = buildVisitedKey(rel.getChildTable(), childRow,
                     childPkCols, childPkValue);
                 if (!visited.contains(childKey)) {
-                    queue.add(new Object[]{
+                    queue.add(new QueueEntry(
                         rel.getChildTable(), childPkValue, childRow, childNode
-                    });
+                    ));
                 }
             }
         }
 
         // ── BFS: ab hier normal nach unten (eingehende FKs) ──
         while (!queue.isEmpty()) {
-            Object[] entry        = queue.poll();
-            String currentTable   = (String) entry[0];
-            String currentPkValue = (String) entry[1];
-            TableRow currentRow   = (TableRow) entry[2];
-            DependencyNode node   = (DependencyNode) entry[3];
+            QueueEntry entry      = queue.poll();
+            String currentTable   = entry.tableName;
+            String currentPkValue = entry.pkValue;
+            TableRow currentRow   = entry.row;
+            DependencyNode node   = entry.node;
 
-            String key = buildVisitedKey(currentTable, currentRow,
-                analyzer.getPrimaryKeyColumns(currentTable), currentPkValue);
+            List<String> currentPkCols = getCachedPkColumns(currentTable, pkCache);
+            String key = buildVisitedKey(currentTable, currentRow, currentPkCols, currentPkValue);
             if (visited.contains(key)) continue;
             visited.add(key);
 
@@ -376,7 +393,7 @@ public class TraversalService {
                     rel.getChildTable(), rel.getFkColumn(), currentPkValue, childRows.size());
                 node.addChild(childNode);
 
-                List<String> childPkCols = analyzer.getPrimaryKeyColumns(rel.getChildTable());
+                List<String> childPkCols = getCachedPkColumns(rel.getChildTable(), pkCache);
                 String childPkCol = childPkCols.isEmpty() ? rel.getFkColumn() : childPkCols.get(0);
 
                 for (TableRow childRow : childRows) {
@@ -389,9 +406,9 @@ public class TraversalService {
                     String childKey = buildVisitedKey(rel.getChildTable(), childRow,
                         childPkCols, childPkValue);
                     if (!visited.contains(childKey)) {
-                        queue.add(new Object[]{
+                        queue.add(new QueueEntry(
                             rel.getChildTable(), childPkValue, childRow, childNode
-                        });
+                        ));
                     }
                 }
             }
@@ -498,6 +515,20 @@ public class TraversalService {
         return result;
     }
 
+    /** Cached PK-Spalten-Abfrage (vermeidet wiederholte SQL-Queries für dieselbe Tabelle). */
+    private List<String> getCachedPkColumns(String table, Map<String, List<String>> pkCache) {
+        String key = table.toUpperCase();
+        List<String> cached = pkCache.get(key);
+        if (cached != null) return cached;
+        try {
+            cached = analyzer.getPrimaryKeyColumns(table);
+        } catch (Exception e) {
+            cached = Collections.emptyList();
+        }
+        pkCache.put(key, cached);
+        return cached;
+    }
+
     /**
      * Baut einen eindeutigen visited-Key aus allen PK-Spalten.
      * Bei zusammengesetzten PKs werden alle Werte einbezogen,
@@ -521,18 +552,6 @@ public class TraversalService {
         return sb.toString();
     }
 
-    /**
-     * Wandelt einen Benutzereingabe-String in ein Oracle-SQL-Literal um.
-     *
-     * Logik: Wenn der Wert vollständig als Long parsebar ist → Zahl (kein Quoting).
-     * Andernfalls → String-Literal mit einfachen Hochkommata, interne Hochkommata
-     * werden durch doppelte Hochkommata escaped.
-     *
-     * Beispiele:
-     *   "42"       → 42
-     *   "ORD-0001" → 'ORD-0001'
-     *   "O'Brien"  → 'O''Brien'
-     */
     /**
      * Extrahiert den ersten lesbaren String-Wert einer Zeile für die Baum-Anzeige.
      * Überspringt PK-Spalten, NULL-Werte und numerische Literale.
@@ -574,6 +593,18 @@ public class TraversalService {
         return true;
     }
 
+    /**
+     * Wandelt einen Benutzereingabe-String in ein Oracle-SQL-Literal um.
+     *
+     * Logik: Wenn der Wert vollständig als Long parsebar ist → Zahl (kein Quoting).
+     * Andernfalls → String-Literal mit einfachen Hochkommata, interne Hochkommata
+     * werden durch doppelte Hochkommata escaped.
+     *
+     * Beispiele:
+     *   "42"       → 42
+     *   "ORD-0001" → 'ORD-0001'
+     *   "O'Brien"  → 'O''Brien'
+     */
     public static String toSqlLiteral(String value) {
         if (value == null || value.isBlank()) {
             throw new IllegalArgumentException("Wert darf nicht leer sein.");

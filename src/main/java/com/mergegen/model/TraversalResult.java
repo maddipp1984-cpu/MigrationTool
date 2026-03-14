@@ -52,9 +52,16 @@ public class TraversalResult {
                     allCounts.merge(row.getTableName(), 1, Integer::sum);
                 }
             }
-            r.getFkRelations().forEach((childTable, rels) ->
-                allFkRelations.computeIfAbsent(childTable, k -> new ArrayList<>()).addAll(rels)
-            );
+            r.getFkRelations().forEach((childTable, rels) -> {
+                List<ForeignKeyRelation> existing = allFkRelations.computeIfAbsent(childTable, k -> new ArrayList<>());
+                for (ForeignKeyRelation rel : rels) {
+                    boolean duplicate = existing.stream().anyMatch(e ->
+                        e.getChildTable().equalsIgnoreCase(rel.getChildTable()) &&
+                        e.getFkColumn().equalsIgnoreCase(rel.getFkColumn()) &&
+                        e.getParentTable().equalsIgnoreCase(rel.getParentTable()));
+                    if (!duplicate) existing.add(rel);
+                }
+            });
         }
         return new TraversalResult(mergedRoot, allRows, allCounts, allFkRelations);
     }

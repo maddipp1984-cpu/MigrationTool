@@ -12,7 +12,7 @@ public class QueryPreset {
     private final String       table;
     private final String       column;
     private final List<String> values;
-    // Key: "PARENT|CHILD|FK_COL", Value: true = traversieren
+    // Key: "PARENT>CHILD.FK_COL", Value: true = traversieren
     private final Map<String, Boolean> traversalRules;
 
     public QueryPreset(String name, String table, String column, List<String> values) {

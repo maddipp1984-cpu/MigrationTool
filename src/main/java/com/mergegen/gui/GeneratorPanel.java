@@ -635,16 +635,21 @@ public class GeneratorPanel extends JPanel {
         // Trigger-Erkennung braucht DB-Verbindung – einmal öffnen
         SchemaAnalyzer triggerAnalyzer = null;
         DatabaseConnection triggerConn = null;
+        java.io.PrintWriter triggerLogWriter = null;
         try {
             var config = settingsPanel.getCurrentConfig();
             triggerConn = new DatabaseConnection(config);
             triggerAnalyzer = new SchemaAnalyzer(triggerConn.get(), config);
+            java.nio.file.Path logPath = java.nio.file.Paths.get("config", "mergegen", "traversal.log");
+            java.nio.file.Files.createDirectories(logPath.getParent());
+            triggerLogWriter = new java.io.PrintWriter(
+                java.nio.file.Files.newBufferedWriter(logPath,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.APPEND));
+            final java.io.PrintWriter logW = triggerLogWriter;
             triggerAnalyzer.setTriggerLog(msg -> {
-                // In traversal.log schreiben (append)
-                try (java.io.PrintWriter w = new java.io.PrintWriter(
-                        new java.io.FileWriter("config/mergegen/traversal.log", true))) {
-                    w.println(msg);
-                } catch (java.io.IOException ignored) {}
+                logW.println(msg);
+                logW.flush();
             });
         } catch (Exception ex) {
             // Trigger-Erkennung nicht möglich – kein Abbruch, nur kein Vorschlag
@@ -713,6 +718,9 @@ public class GeneratorPanel extends JPanel {
         } finally {
             if (triggerConn != null) {
                 try { triggerConn.close(); } catch (Exception ignored) {}
+            }
+            if (triggerLogWriter != null) {
+                triggerLogWriter.close();
             }
         }
 
