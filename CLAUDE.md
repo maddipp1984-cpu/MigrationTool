@@ -2,6 +2,18 @@
 
 Einzelnes Gradle-Projekt, das **MergeGen** (Oracle MERGE-Script-Generator), **ExcelSplit** (Excel-zu-CSV-Konverter) und **INSERT Generator** (generischer INSERT-Script-Generator) in einem gemeinsamen Release mit geteilter JRE zusammenfasst. Single-Frame-Anwendung mit Seitenleiste – alle Tools werden im selben Fenster angezeigt.
 
+## UX-Checkliste für neue Features
+- Dialog-X / Escape = Abbruch (nicht stillschweigend weitermachen)
+- Reset-/Neu-Button vorsehen
+- Nur relevante Optionen im Dialog zeigen (vorher filtern)
+- Keine doppelten Konzepte für dasselbe Problem
+- Keine automatischen destruktiven/endgültigen Aktionen (User entscheidet)
+- User-Entscheidungen bei Wiederholung persistieren (Presets, Config)
+- Feature am User-Mental-Modell orientieren, nicht am Code-Modell
+- Duplikat-Prüfung bei benannten Einträgen (Presets, Profile)
+- Config-Dateien folgen dem Muster `config/<tool>/`
+- Vor dem Bauen fragen: Löst das ein echtes Problem oder klingt es nur logisch?
+
 ## Package-Regeln
 
 - Neue Klassen immer im fachlich passenden Package anlegen, **nicht** im Launcher-Package
