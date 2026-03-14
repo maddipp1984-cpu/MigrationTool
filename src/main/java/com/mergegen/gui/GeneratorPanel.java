@@ -610,36 +610,6 @@ public class GeneratorPanel extends JPanel {
         if (lastResult == null) return;
         String nameColumn = columnField.getText().trim().toUpperCase();
 
-        // Sicherheitsprüfung: bei Namens-Suche ohne UPDATE prüfen ob Objekt bereits existiert
-        if (!nameColumn.isEmpty() && !updateCheck.isSelected() && lastIds != null) {
-            try {
-                var config = settingsPanel.getCurrentConfig();
-                try (DatabaseConnection conn = new DatabaseConnection(config)) {
-                    SchemaAnalyzer analyzer = new SchemaAnalyzer(conn.get(), config);
-                    List<String> existing = new ArrayList<>();
-                    for (String val : lastIds) {
-                        if (analyzer.existsRow(lastTable, nameColumn, val)) {
-                            existing.add(val);
-                        }
-                    }
-                    if (!existing.isEmpty()) {
-                        JOptionPane.showMessageDialog(this,
-                            "Folgende Objekte existieren bereits in " + lastTable + ":\n"
-                            + String.join(", ", existing)
-                            + "\n\nScript-Generierung abgebrochen."
-                            + "\nAktiviere 'Bei Übereinstimmung aktualisieren' um vorhandene Objekte zu überschreiben.",
-                            "Objekt bereits vorhanden", JOptionPane.WARNING_MESSAGE);
-                        return;
-                    }
-                }
-            } catch (Exception ex) {
-                JOptionPane.showMessageDialog(this,
-                    "Fehler bei Duplikat-Prüfung:\n" + rootCause(ex),
-                    "Fehler", JOptionPane.ERROR_MESSAGE);
-                return;
-            }
-        }
-
         String testSuffix = testModeCheck.isSelected()
             ? "_" + java.time.LocalDateTime.now()
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
