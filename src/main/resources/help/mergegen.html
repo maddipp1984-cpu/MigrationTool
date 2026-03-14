@@ -24,6 +24,11 @@ idempotent (MERGE: INSERT wenn neu, optional UPDATE wenn vorhanden).<br><br>
 • <b>Virtuelle FKs:</b> Fehlende DB-Constraints manuell definieren,
   werden beim Traversal mit echten FKs kombiniert und automatisch
   bereinigt wenn sie später als echte Constraints existieren<br>
+• <b>Subselect-FK-Mapping:</b> Referenzdaten, die auf der Ziel-DB bereits
+  existieren aber andere IDs haben, werden per Subselect aufgelöst
+  statt mit Literal-Werten eingebettet<br>
+• <b>Konstantentabellen:</b> Tabellen, die als Konstantentabellen markiert
+  sind, werden aus dem MERGE-Script gefiltert<br>
 • <b>Testmodus:</b> Jeder Lauf erzeugt ein neues Objekt durch Timestamp-Suffix –
   ideal für wiederholbare Tests ohne manuelle Bereinigung<br>
 • <b>Skip-Check:</b> Bei INSERT-only mit Kind-Tabellen wird automatisch
@@ -84,6 +89,33 @@ zum Verlauf werden Presets nur auf Knopfdruck angelegt.<br>
 <b>Kurzgesagt:</b> Der Verlauf merkt sich automatisch alles was analysiert
 wurde. Presets sind manuell gespeicherte Favoriten für wiederkehrende Abfragen.
 
+## Traversal-Entscheidung
+
+Beim Traversal wird für jede gefundene FK-Beziehung ein Dialog mit
+drei Optionen angezeigt:<br><br>
+
+<b>Traversieren:</b><br>
+Die abhängigen Datensätze werden geladen und ins Script aufgenommen.
+Standardverhalten für die meisten Beziehungen.<br><br>
+
+<b>Überspringen:</b><br>
+Die Beziehung wird ignoriert – keine Datensätze dieser Tabelle im Script.<br><br>
+
+<b>Subselect:</b><br>
+Die Tabelle wird <i>nicht</i> traversiert, aber FK-Werte im Script werden
+durch einen Subselect ersetzt. Ideal für Referenzdaten (z.B. Abteilungen,
+Statuswerte), die auf der Ziel-DB bereits existieren aber andere IDs haben.<br>
+Nach Auswahl von "Subselect" erscheint ein zweiter Dialog zur Auswahl
+der Lookup-Spalte(n) – diese werden im WHERE des Subselects verwendet.<br><br>
+
+<b>Beispiel:</b><br>
+Statt <code>90 AS DEPARTMENT_ID</code> wird im Script generiert:<br>
+<code>(SELECT DEPARTMENT_ID FROM DEPARTMENTS WHERE DEPARTMENT_NAME = 'Executive')
+AS DEPARTMENT_ID</code><br><br>
+
+Die Entscheidungen werden beim Preset-Speichern mit gesichert und beim
+nächsten Laden des Presets automatisch angewendet.
+
 ## Abhängigkeitsbaum
 
 Nach der Analyse wird ein hierarchischer Baum angezeigt:<br><br>
@@ -114,7 +146,8 @@ WHEN NOT MATCHED THEN INSERT ...;<br></code><br>
 <b>Werte-Priorität pro Spalte:</b><br>
 1. PL/SQL-Variable (FK auf Sequence-gemappten Parent-PK)<br>
 2. <code>SEQUENCE.NEXTVAL</code> (direkte Sequence-Zuordnung)<br>
-3. SQL-Literal (Wert aus der Quelldatenbank)<br><br>
+3. Subselect (FK auf Tabelle mit Subselect-Mapping)<br>
+4. SQL-Literal (Wert aus der Quelldatenbank)<br><br>
 
 <b>Ausgabe:</b><br>
 <code>&lt;ausgabeverzeichnis&gt;/&lt;TABELLENNAME&gt;/MERGE_&lt;TABELLENNAME&gt;.sql</code><br>
@@ -150,8 +183,13 @@ Ordnet PK-Spalten einer Oracle-Sequence zu.<br><br>
 <b>"Hinzufügen":</b> Neuen Eintrag anlegen (alle drei Felder Pflicht).<br>
 <b>"Entfernen":</b> Markierten Eintrag löschen.<br><br>
 
-Beim Generieren werden Mappings als Vorschlag verwendet. Dreistufige
-Logik: 1. Store-Eintrag → 2. Trigger-Erkennung → 3. leeres Feld.
+Beim Generieren werden Mappings als Vorschlag verwendet. Vierstufige
+Logik:<br>
+1. Store-Eintrag (bereits gespeichert)<br>
+2. <code>STB_TABDEF</code>-Tabelle (Spalte <code>SEQ_NAME</code> zur
+   Tabelle in <code>TAB_NAME</code>)<br>
+3. Trigger-Erkennung (BEFORE INSERT mit NEXTVAL)<br>
+4. Leeres Feld (User-Eingabe)<br><br>
 Leere Eingabe = PK-Wert aus Quelle 1:1 übernehmen.
 
 ## Virtuelle FKs
@@ -171,6 +209,34 @@ Definiert FK-Beziehungen, die nicht als DB-Constraint existieren.<br><br>
 Virtuelle FKs werden beim Traversal mit echten DB-FKs kombiniert.
 <b>Auto-Bereinigung:</b> Wenn ein virtueller FK inzwischen als echter
 Constraint in der DB existiert, wird er automatisch entfernt.
+
+## Konstantentabellen
+
+Tab "Konstantentabellen" im MergeGen-Bereich.<br>
+Tabellen, die hier eingetragen sind, werden bei der Script-Generierung
+aus dem MERGE-Script gefiltert. Die Datensätze dieser Tabellen erscheinen
+zwar im Abhängigkeitsbaum, aber im generierten SQL wird kein MERGE
+für sie erzeugt.<br><br>
+
+<b>Typischer Einsatz:</b><br>
+Stammdaten-Tabellen (z.B. Status-Codes, Länder, Währungen), die auf
+der Ziel-DB bereits vorhanden sind und nicht überschrieben werden sollen.<br><br>
+
+<b>"Hinzufügen":</b> Tabellenname eingeben (wird automatisch in Großbuchstaben
+umgewandelt).<br>
+<b>"Entfernen":</b> Markierten Eintrag löschen.
+
+## Subselect-Mappings
+
+Persistent gespeicherte Subselect-Konfigurationen.<br>
+Werden automatisch angelegt, wenn bei der Traversal-Entscheidung
+"Subselect" gewählt und Lookup-Spalten ausgewählt werden.<br><br>
+
+<b>Datei:</b> <code>config/mergegen/subselect-mappings.txt</code><br>
+<b>Format:</b> <code>TABELLE|PK_SPALTE|LOOKUP_SPALTE1;LOOKUP_SPALTE2</code><br><br>
+
+Einmal konfigurierte Subselect-Mappings werden bei zukünftigen
+Generierungen automatisch angewendet, ohne erneute Abfrage.
 
 ## DB-Verbindung
 
