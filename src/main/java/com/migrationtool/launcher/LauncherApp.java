@@ -12,8 +12,6 @@ import com.mergegen.config.TableHistoryStore;
 import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.VirtualFkStore;
 import com.kostenattribute.InsertGenPanel;
-import com.migrationtool.scriptexec.ScriptExecutorPanel;
-import com.migrationtool.scriptexec.ZielDbPanel;
 import com.mergegen.gui.ConstantTablePanel;
 import com.mergegen.gui.GeneratorPanel;
 import com.mergegen.gui.SequenceMappingPanel;
@@ -83,10 +81,6 @@ public class LauncherApp {
         MainPresenter excelPresenter = new MainPresenter(excelWindow, new ExcelSplitService(), new AppConfig(basePath), basePath);
         JPanel        excelPanel    = excelWindow.getContentPanel();
 
-        // ── Ziel-DB + Script-Ausführung ───────────────────────────────────────
-        ZielDbPanel          zielDbPanel  = new ZielDbPanel();
-        ScriptExecutorPanel  scriptPanel  = new ScriptExecutorPanel(zielDbPanel);
-
         // ── Schritte und ihre Namen ───────────────────────────────────────────
         Map<String, WorkflowPanel.Step> availableSteps = new LinkedHashMap<>();
         availableSteps.put("Exceltools", new WorkflowPanel.Step() {
@@ -103,14 +97,6 @@ public class LauncherApp {
                 generatorPanel.runWithLastSettings(onComplete);
             }
         });
-        availableSteps.put("ScriptAusfuehren", new WorkflowPanel.Step() {
-            @Override public String getName()        { return "Script ausführen"; }
-            @Override public String getDescription() { return "Führt MERGE-Scripts auf der Ziel-DB aus"; }
-            @Override public void execute(Consumer<Boolean> onComplete) {
-                scriptPanel.executeAll(onComplete);
-            }
-        });
-
         // ── Gespeicherte Reihenfolge laden ────────────────────────────────────
         List<String> stepOrder = loadNavOrder();
         if (stepOrder.isEmpty()) {
@@ -149,9 +135,7 @@ public class LauncherApp {
         contentArea.add(workflowPanel,        "workflow");
         contentArea.add(mergeGenPane,         "mergegen");
         contentArea.add(excelPanel,           "excelsplit");
-        contentArea.add(scriptPanel,          "scriptexec");
         contentArea.add(settingsPanel,        "settings");
-        contentArea.add(zielDbPanel,          "zieldb");
         contentArea.add(insertGenPanel, "insertgen");
 
         // ── Navigationsbaum (statisch, nur zur Navigation) ────────────────────
@@ -190,23 +174,17 @@ public class LauncherApp {
         DefaultMutableTreeNode mergescripte         = new DefaultMutableTreeNode("Mergescripte");
         DefaultMutableTreeNode mergeGen             = new DefaultMutableTreeNode("MERGE Generator");
         DefaultMutableTreeNode insertGen            = new DefaultMutableTreeNode("INSERT Generator");
-        DefaultMutableTreeNode scriptAusfuehren = new DefaultMutableTreeNode("Script ausführen");
-        DefaultMutableTreeNode zielDbAusfuehren = new DefaultMutableTreeNode("Ziel-DB ausführen");
         DefaultMutableTreeNode einstellungen   = new DefaultMutableTreeNode("Einstellungen");
         DefaultMutableTreeNode dbVerbindung    = new DefaultMutableTreeNode("DB-Verbindung");
-        DefaultMutableTreeNode zielDbSettings  = new DefaultMutableTreeNode("Ziel-DB");
 
         exceltools.add(excelSplit);
         mergescripte.add(mergeGen);
         mergescripte.add(insertGen);
-        scriptAusfuehren.add(zielDbAusfuehren);
         einstellungen.add(dbVerbindung);
-        einstellungen.add(zielDbSettings);
 
         root.add(workflowNode);
         root.add(exceltools);
         root.add(mergescripte);
-        root.add(scriptAusfuehren);
         root.add(einstellungen);
 
         // ── Node → Card-Mapping ───────────────────────────────────────────────
@@ -215,9 +193,7 @@ public class LauncherApp {
         nodeCards.put(excelSplit,       "excelsplit");
         nodeCards.put(mergeGen,         "mergegen");
         nodeCards.put(insertGen,        "insertgen");
-        nodeCards.put(zielDbAusfuehren, "scriptexec");
         nodeCards.put(dbVerbindung,     "settings");
-        nodeCards.put(zielDbSettings,   "zieldb");
 
         // ── JTree ─────────────────────────────────────────────────────────────
         JTree tree = new JTree(root);
@@ -235,7 +211,6 @@ public class LauncherApp {
         // ── Alle Kategorien aufgeklappt, MERGE Generator vorausgewählt ────────
         tree.expandPath(new TreePath(exceltools.getPath()));
         tree.expandPath(new TreePath(mergescripte.getPath()));
-        tree.expandPath(new TreePath(scriptAusfuehren.getPath()));
         tree.expandPath(new TreePath(einstellungen.getPath()));
         tree.setSelectionPath(new TreePath(mergeGen.getPath()));
         ((CardLayout) contentArea.getLayout()).show(contentArea, "mergegen");
