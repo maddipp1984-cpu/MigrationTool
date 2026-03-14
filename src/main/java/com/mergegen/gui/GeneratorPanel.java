@@ -437,7 +437,7 @@ public class GeneratorPanel extends JPanel {
             if (lastResult != null) {
                 new DiagramDialog(
                     javax.swing.SwingUtilities.getWindowAncestor(this),
-                    lastResult, ruleStore, constTableStore
+                    lastResult, ruleStore, constTableStore, seqStore
                 ).setVisible(true);
             }
         });

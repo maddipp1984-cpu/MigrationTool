@@ -1,10 +1,14 @@
 package com.mergegen.gui;
 
 import com.mergegen.config.ConstantTableStore;
+import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.TraversalRuleStore.TraversalRule;
+import com.mergegen.model.ColumnInfo;
 import com.mergegen.model.DependencyNode;
 import com.mergegen.model.ForeignKeyRelation;
+import com.mergegen.model.SequenceMapping;
+import com.mergegen.model.TableRow;
 import com.mergegen.model.TraversalResult;
 import com.mxgraph.layout.hierarchical.mxHierarchicalLayout;
 import com.mxgraph.model.mxCell;
@@ -36,8 +40,9 @@ public class DiagramDialog extends JDialog {
     private static final String FONT_COLOR_DARK  = "#666666";
 
     public DiagramDialog(Window owner, TraversalResult result,
-                         TraversalRuleStore ruleStore, ConstantTableStore constTableStore) {
-        super(owner, "Abhängigkeitsdiagramm", ModalityType.MODELESS);
+                         TraversalRuleStore ruleStore, ConstantTableStore constTableStore,
+                         SequenceMappingStore seqStore) {
+        super(owner, "Abhängigkeitsdiagramm – " + result.getRootNode().getTableName().toUpperCase(), ModalityType.MODELESS);
 
         mxGraph graph = new mxGraph();
         graph.setAllowDanglingEdges(false);
@@ -60,14 +65,29 @@ public class DiagramDialog extends JDialog {
             Set<String> allTables = new LinkedHashSet<>();
             collectTables(rootNode, allTables);
 
-            // PK- und FK-Spalten pro Tabelle sammeln
-            Map<String, String> pkColumns = new LinkedHashMap<>();
-            Map<String, Set<String>> fkColumns = new LinkedHashMap<>();
-            collectColumns(rootNode, pkColumns);
+            // Alle Spalten pro Tabelle aus den traversierten Rows sammeln
+            Map<String, Map<String, ColumnInfo>> tableColumns = new LinkedHashMap<>();
+            for (TableRow row : result.getOrderedRows()) {
+                String tbl = row.getTableName().toUpperCase();
+                if (!tableColumns.containsKey(tbl)) {
+                    tableColumns.put(tbl, row.getColumns());
+                }
+            }
+
+            // FK-Spalten pro Tabelle
+            Set<String> allFkColumns = new HashSet<>();
             for (List<ForeignKeyRelation> fks : fkRelations.values()) {
                 for (ForeignKeyRelation fk : fks) {
-                    fkColumns.computeIfAbsent(fk.getChildTable().toUpperCase(), k -> new LinkedHashSet<>())
-                        .add(fk.getFkColumn().toUpperCase());
+                    allFkColumns.add(fk.getChildTable().toUpperCase() + "." + fk.getFkColumn().toUpperCase());
+                }
+            }
+
+            // Sequences pro Tabelle
+            Map<String, String> seqByTable = new LinkedHashMap<>();
+            if (seqStore != null) {
+                for (String table : allTables) {
+                    java.util.Optional<SequenceMapping> seq = seqStore.findByTable(table);
+                    seq.ifPresent(s -> seqByTable.put(table.toUpperCase(), s.getSequenceName()));
                 }
             }
 
@@ -80,13 +100,22 @@ public class DiagramDialog extends JDialog {
                 boolean isRoot = table.equalsIgnoreCase(rootNode.getTableName());
                 boolean isConst = constTables.contains(table.toUpperCase());
 
+                Map<String, ColumnInfo> cols = tableColumns.getOrDefault(table.toUpperCase(), Collections.emptyMap());
+                String seqName = seqByTable.get(table.toUpperCase());
                 String label = buildLabel(table, tableCounts.getOrDefault(table, 0),
-                    pkColumns.get(table), fkColumns.getOrDefault(table, Collections.emptySet()));
+                    cols, allFkColumns, seqName);
 
                 String style = isConst ? "constantTable" : (isRoot ? "rootTable" : "normalTable");
 
+                // Breite dynamisch: längste Zeile bestimmen
+                int maxLen = 0;
+                for (String line : label.split("\n")) {
+                    maxLen = Math.max(maxLen, line.length());
+                }
+                int width = Math.max(180, maxLen * 7 + 20);
+
                 Object v = graph.insertVertex(parent, null, label,
-                    0, 0, 180, 0, style);
+                    0, 0, width, 0, style);
 
                 // Höhe dynamisch berechnen
                 int lineCount = label.split("\n").length;
@@ -141,6 +170,9 @@ public class DiagramDialog extends JDialog {
             layout.setOrientation(SwingConstants.NORTH);
             layout.execute(parent);
 
+            // Insets: alle Zellen um 40px nach rechts/unten verschieben
+            graph.moveCells(graph.getChildCells(parent), 40, 40);
+
         } finally {
             graph.getModel().endUpdate();
         }
@@ -151,6 +183,44 @@ public class DiagramDialog extends JDialog {
         graphComponent.getViewport().setBackground(Color.WHITE);
         graphComponent.setWheelScrollingEnabled(false);
         graphComponent.setAutoScroll(false);
+        graphComponent.setPanning(true);
+
+        // Panning mit linker Maustaste (ohne Shift)
+        final int[] dragStart = new int[2];
+        final boolean[] dragging = {false};
+        graphComponent.getGraphControl().addMouseListener(new java.awt.event.MouseAdapter() {
+            @Override
+            public void mousePressed(java.awt.event.MouseEvent e) {
+                // Nur Panning wenn kein Zell-Hit
+                Object cell = graphComponent.getCellAt(e.getX(), e.getY());
+                if (cell == null) {
+                    dragStart[0] = e.getX();
+                    dragStart[1] = e.getY();
+                    dragging[0] = true;
+                    graphComponent.getGraphControl().setCursor(
+                        Cursor.getPredefinedCursor(Cursor.MOVE_CURSOR));
+                }
+            }
+            @Override
+            public void mouseReleased(java.awt.event.MouseEvent e) {
+                dragging[0] = false;
+                graphComponent.getGraphControl().setCursor(Cursor.getDefaultCursor());
+            }
+        });
+        graphComponent.getGraphControl().addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
+            @Override
+            public void mouseDragged(java.awt.event.MouseEvent e) {
+                if (dragging[0]) {
+                    JViewport vp = (JViewport) graphComponent.getGraphControl().getParent();
+                    Point vpp = vp.getViewPosition();
+                    vpp.translate(dragStart[0] - e.getX(), dragStart[1] - e.getY());
+                    vpp.x = Math.max(0, vpp.x);
+                    vpp.y = Math.max(0, vpp.y);
+                    graphComponent.getGraphControl().scrollRectToVisible(
+                        new Rectangle(vpp, vp.getSize()));
+                }
+            }
+        });
 
         // Zoom mit Mausrad
         graphComponent.addMouseWheelListener(e -> {
@@ -179,8 +249,9 @@ public class DiagramDialog extends JDialog {
         setLayout(new BorderLayout());
         add(graphComponent, BorderLayout.CENTER);
         add(legendPanel, BorderLayout.SOUTH);
-        setSize(1000, 700);
-        setLocationRelativeTo(owner);
+        GraphicsEnvironment ge = GraphicsEnvironment.getLocalGraphicsEnvironment();
+        Rectangle screenBounds = ge.getMaximumWindowBounds();
+        setBounds(screenBounds);
 
         // Escape schließt den Dialog
         getRootPane().registerKeyboardAction(
@@ -258,32 +329,42 @@ public class DiagramDialog extends JDialog {
         stylesheet.putCellStyle("constantEdge", constEdge);
     }
 
-    private String buildLabel(String table, int count, String pkCol, Set<String> fkCols) {
+    private String buildLabel(String table, int count, Map<String, ColumnInfo> columns,
+                              Set<String> allFkColumns, String seqName) {
         StringBuilder sb = new StringBuilder();
-        sb.append(table).append("  (").append(count).append(")\n");
-        if (pkCol != null) {
-            sb.append("PK  ").append(pkCol).append("\n");
+        // Header: Tabellenname + Zeilenanzahl
+        sb.append(table).append("  (").append(count).append(")");
+        if (seqName != null) {
+            sb.append("\nSEQ  ").append(seqName);
         }
-        for (String fk : fkCols) {
-            sb.append("FK  ").append(fk).append("\n");
+        sb.append("\n————————————————");
+
+        for (Map.Entry<String, ColumnInfo> entry : columns.entrySet()) {
+            ColumnInfo col = entry.getValue();
+            String colName = col.getName().toUpperCase();
+            sb.append("\n");
+
+            // Markierung
+            boolean isPk = col.isPrimaryKey();
+            boolean isFk = allFkColumns.contains(table.toUpperCase() + "." + colName);
+            if (isPk && isFk) {
+                sb.append("PK/FK ");
+            } else if (isPk) {
+                sb.append("PK  ");
+            } else if (isFk) {
+                sb.append("FK  ");
+            } else {
+                sb.append("      ");
+            }
+            sb.append(colName).append("  ").append(col.getDataType());
         }
-        return sb.toString().trim();
+        return sb.toString();
     }
 
     private void collectTables(DependencyNode node, Set<String> tables) {
         tables.add(node.getTableName().toUpperCase());
         for (DependencyNode child : node.getChildren()) {
             collectTables(child, tables);
-        }
-    }
-
-    private void collectColumns(DependencyNode node, Map<String, String> pkColumns) {
-        String table = node.getTableName().toUpperCase();
-        if (!pkColumns.containsKey(table) && node.getPkColumn() != null) {
-            pkColumns.put(table, node.getPkColumn().toUpperCase());
-        }
-        for (DependencyNode child : node.getChildren()) {
-            collectColumns(child, pkColumns);
         }
     }
 
