@@ -161,7 +161,7 @@ MigrationTool/
 - **SubselectGeneratorTest** (3): Subselect-Ersetzung im USING-SELECT, Priorität ColVar > Subselect, Original-Literal ohne Subselect
 - **ScriptWriterTest** (16): `buildVarName` (30-Zeichen-Limit), `buildColVarSubstitutions`, Plain vs. PL/SQL-Mode, Typ-Erkennung, 4-Ebenen-FK-Kette, 2-Root-Rows, Skip-Check
 - **TraversalServiceTest** (12): `toSqlLiteral()` – Zahlen, Strings, Escaping, Null/Blank
-- **SubselectMappingStoreTest** (8): Add/Get, Composite-Lookup, Case-Insensitiv, Remove, Persistenz-Roundtrip, buildSubselect
+- **SubselectMappingStoreTest** (11): Add/Get, Composite-Lookup, Case-Insensitiv, Remove, Persistenz-Roundtrip, buildSubselect (single/composite/null/missing/explicitNull)
 - **GlobalTraversalRuleStoreTest** (8): Save/Get, Case-Insensitiv, Update, Multiple Tables, Persistenz-Roundtrip, Empty-Remove, Subselect
 - Refactoring für Testbarkeit: `ScriptWriter.buildVarName()` + `buildColVarSubstitutions()` sind package-private
 
