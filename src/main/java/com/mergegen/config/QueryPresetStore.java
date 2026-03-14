@@ -1,5 +1,6 @@
 package com.mergegen.config;
 
+import com.mergegen.config.TraversalRuleStore.TraversalRule;
 import com.mergegen.model.QueryPreset;
 
 import java.io.*;
@@ -64,7 +65,7 @@ public class QueryPresetStore {
                 String       table  = parts[1].trim();
                 String       column = parts[2].trim();
                 List<String> values = splitList(parts[3]);
-                Map<String, Boolean> rules = new LinkedHashMap<>();
+                Map<String, TraversalRule> rules = new LinkedHashMap<>();
                 if (parts.length >= 5 && !parts[4].trim().isEmpty()) {
                     rules = parseRules(parts[4].trim());
                 }
@@ -109,29 +110,43 @@ public class QueryPresetStore {
     }
 
     /**
-     * Parst Traversal-Regeln aus dem Format: PARENT>CHILD.FK=JA;PARENT>CHILD.FK=NEIN
+     * Parst Traversal-Regeln aus dem Format: PARENT>CHILD.FK=JA;PARENT>CHILD.FK=NEIN;...=SUBSELECT
      */
-    private static Map<String, Boolean> parseRules(String s) {
-        Map<String, Boolean> rules = new LinkedHashMap<>();
+    private static Map<String, TraversalRule> parseRules(String s) {
+        Map<String, TraversalRule> rules = new LinkedHashMap<>();
         for (String part : s.split(LIST_SEP, -1)) {
             part = part.trim();
             if (part.isEmpty()) continue;
             int eq = part.lastIndexOf('=');
             if (eq < 0) continue;
             String key = part.substring(0, eq).trim();
-            String val = part.substring(eq + 1).trim();
-            rules.put(key, "JA".equalsIgnoreCase(val));
+            String val = part.substring(eq + 1).trim().toUpperCase();
+            TraversalRule rule;
+            switch (val) {
+                case "JA":        rule = TraversalRule.TRAVERSE;  break;
+                case "SUBSELECT": rule = TraversalRule.SUBSELECT; break;
+                default:          rule = TraversalRule.SKIP;      break;
+            }
+            rules.put(key, rule);
         }
         return rules;
     }
 
     /**
-     * Formatiert Traversal-Regeln: PARENT>CHILD.FK=JA;PARENT>CHILD.FK=NEIN
+     * Formatiert Traversal-Regeln: PARENT>CHILD.FK=JA;PARENT>CHILD.FK=NEIN;...=SUBSELECT
      */
-    private static String formatRules(Map<String, Boolean> rules) {
+    private static String formatRules(Map<String, TraversalRule> rules) {
         if (rules == null || rules.isEmpty()) return "";
         return rules.entrySet().stream()
-            .map(e -> e.getKey() + "=" + (e.getValue() ? "JA" : "NEIN"))
+            .map(e -> {
+                String val;
+                switch (e.getValue()) {
+                    case TRAVERSE:  val = "JA";        break;
+                    case SUBSELECT: val = "SUBSELECT"; break;
+                    default:        val = "NEIN";      break;
+                }
+                return e.getKey() + "=" + val;
+            })
             .collect(Collectors.joining(LIST_SEP));
     }
 }
