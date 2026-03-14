@@ -50,12 +50,13 @@ public class ScriptWriter {
                         Map<String, List<ForeignKeyRelation>> fkRelations,
                         boolean includeUpdate,
                         SubselectMappingStore subselectStore,
-                        Map<String, TableRow> subselectRows) throws IOException {
+                        Map<String, TableRow> subselectRows,
+                        String alias) throws IOException {
 
         SubselectMappingStore ssStore = subselectStore;
         Map<String, TableRow> ssRows = subselectRows != null ? subselectRows : new HashMap<>();
 
-        File outputFile = prepareOutputFile(rootTable, outputDir);
+        File outputFile = prepareOutputFile(rootTable, outputDir, alias);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
 
         boolean hasChildren = orderedRows.stream()
@@ -300,13 +301,14 @@ public class ScriptWriter {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * Validiert den Tabellennamen, legt den Ausgabeordner an und löscht alte Scripts.
-     * @return die Ziel-Datei (MERGE_<TABLE>.sql)
+     * Validiert den Tabellennamen, legt den Ausgabeordner an und loescht alte Scripts.
+     * @param alias  Optionaler Alias fuer den Dateinamen (null/leer = Tabellenname)
+     * @return die Ziel-Datei (MERGE_<ALIAS>.sql oder MERGE_<TABLE>.sql)
      */
-    private File prepareOutputFile(String rootTable, String outputDir) {
+    private File prepareOutputFile(String rootTable, String outputDir, String alias) {
         String safeTable = rootTable.toUpperCase();
         if (!safeTable.matches("[A-Z_$#][A-Z0-9_$#]*")) {
-            throw new IllegalArgumentException("Ungültiger Tabellenname: " + rootTable);
+            throw new IllegalArgumentException("Ungueltiger Tabellenname: " + rootTable);
         }
         File tableDir = new File(outputDir, safeTable);
         tableDir.mkdirs();
@@ -314,7 +316,10 @@ public class ScriptWriter {
         if (oldFiles != null) {
             for (File f : oldFiles) f.delete();
         }
-        return new File(tableDir, "MERGE_" + safeTable + ".sql");
+        String fileName = (alias != null && !alias.trim().isEmpty())
+            ? alias.trim().replaceAll("[^A-Za-z0-9_\\-]", "_")
+            : safeTable;
+        return new File(tableDir, "MERGE_" + fileName + ".sql");
     }
 
     private void writeTableHeader(BufferedWriter writer, String table, int count) throws IOException {
@@ -358,12 +363,13 @@ public class ScriptWriter {
                                   Map<String, List<ForeignKeyRelation>> fkRelations,
                                   boolean includeUpdate,
                                   SubselectMappingStore subselectStore,
-                                  Map<String, TableRow> subselectRows) throws IOException {
+                                  Map<String, TableRow> subselectRows,
+                                  String alias) throws IOException {
 
         SubselectMappingStore ssStore = subselectStore;
         Map<String, TableRow> ssRows = subselectRows != null ? subselectRows : new HashMap<>();
 
-        File outputFile = prepareOutputFile(rootTable, outputDir);
+        File outputFile = prepareOutputFile(rootTable, outputDir, alias);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
 
         // Gesamt-Counts für Header

@@ -55,6 +55,7 @@ public class GeneratorPanel extends JPanel {
     private final JTextField tableField  = new JTextField(25);
     private final JTextField columnField = new JTextField(20);
     private final JTextArea  valueArea   = new JTextArea(5, 20);
+    private final JTextField aliasField      = new JTextField(20);
     private final JCheckBox  testModeCheck   = new JCheckBox("Testmodus (Timestamp-Suffix an Suchspalte)");
     private final JCheckBox  updateCheck     = new JCheckBox("Bei Übereinstimmung aktualisieren (UPDATE)");
     private final JButton    analyzeBtn      = new JButton("Abhängigkeiten analysieren");
@@ -162,6 +163,7 @@ public class GeneratorPanel extends JPanel {
             presetStore.findByName(selected).ifPresent(preset -> {
                 tableField.setText(preset.getTable());
                 columnField.setText(preset.getColumn());
+                aliasField.setText(preset.getAlias());
                 valueArea.setText(String.join("\n", preset.getValues()));
                 ruleStore.loadFrom(preset.getTraversalRules());
             });
@@ -203,16 +205,27 @@ public class GeneratorPanel extends JPanel {
         hintLabel.setFont(hintLabel.getFont().deriveFont(Font.PLAIN, 11f));
         p.add(hintLabel, hintRow);
 
-        GridBagConstraints testModeRow = gbc(1, 3, GridBagConstraints.WEST);
+        lbl.gridy = 3; fld.gridy = 3;
+        p.add(new JLabel("Dateiname-Alias:"), lbl);
+        aliasField.setToolTipText("Optionaler Alias fuer den Dateinamen (z.B. 'King_Export' statt Tabellenname)");
+        p.add(aliasField, fld);
+
+        GridBagConstraints aliasHintRow = gbc(1, 4, GridBagConstraints.WEST);
+        JLabel aliasHintLabel = new JLabel("Leer = Tabellenname als Dateiname");
+        aliasHintLabel.setForeground(Color.GRAY);
+        aliasHintLabel.setFont(aliasHintLabel.getFont().deriveFont(Font.PLAIN, 11f));
+        p.add(aliasHintLabel, aliasHintRow);
+
+        GridBagConstraints testModeRow = gbc(1, 5, GridBagConstraints.WEST);
         testModeCheck.setToolTipText("Im Testmodus wird ein Timestamp-Suffix an die Suchspalte angehängt " +
             "→ Datensatz gilt als neu und wird immer per INSERT angelegt");
         p.add(testModeCheck, testModeRow);
 
-        GridBagConstraints updateRow = gbc(1, 4, GridBagConstraints.WEST);
+        GridBagConstraints updateRow = gbc(1, 6, GridBagConstraints.WEST);
         updateCheck.setToolTipText("Fügt WHEN MATCHED THEN UPDATE hinzu – alle Nicht-PK-Spalten werden aktualisiert");
         p.add(updateCheck, updateRow);
 
-        lbl.gridy = 5; fld.gridy = 5;
+        lbl.gridy = 7; fld.gridy = 7;
         lbl.anchor = GridBagConstraints.NORTHEAST;
         p.add(new JLabel("Werte (ein Wert pro Zeile):"), lbl);
         // TextArea mit Scrollbar
@@ -224,12 +237,12 @@ public class GeneratorPanel extends JPanel {
         fld.fill    = GridBagConstraints.HORIZONTAL;
         fld.weighty = 0;
 
-        GridBagConstraints btnRow = gbc(0, 6, GridBagConstraints.WEST);
+        GridBagConstraints btnRow = gbc(0, 8, GridBagConstraints.WEST);
         btnRow.gridwidth = 2;
         btnRow.insets    = new Insets(16, 0, 4, 0);
         p.add(analyzeBtn, btnRow);
 
-        GridBagConstraints statusRow = gbc(0, 7, GridBagConstraints.WEST);
+        GridBagConstraints statusRow = gbc(0, 9, GridBagConstraints.WEST);
         statusRow.gridwidth = 2;
         inputStatus.setForeground(Color.RED);
         p.add(inputStatus, statusRow);
@@ -488,7 +501,8 @@ public class GeneratorPanel extends JPanel {
             .filter(s -> !s.isEmpty())
             .collect(Collectors.toList());
 
-        presetStore.add(new QueryPreset(finalName, table, column, values, ruleStore.getAll()));
+        String alias = aliasField.getText().trim();
+        presetStore.add(new QueryPreset(finalName, table, column, values, ruleStore.getAll(), alias));
 
         // 6. Combo aktualisieren und neues Preset auswählen
         refreshPresetCombo();
@@ -772,6 +786,7 @@ public class GeneratorPanel extends JPanel {
             @Override
             protected String doInBackground() throws Exception {
                 ScriptWriter writer = new ScriptWriter();
+                String fileAlias = aliasField.getText().trim();
                 if (perObjectRows.size() > 1) {
                     return writer.writePerObject(
                         perObjectRows,
@@ -784,7 +799,8 @@ public class GeneratorPanel extends JPanel {
                         lastResult.getFkRelations(),
                         finalIncludeUpdate,
                         subselectStore,
-                        lastResult.getSubselectRows());
+                        lastResult.getSubselectRows(),
+                        fileAlias);
                 } else {
                     return writer.write(
                         finalFilteredRows,
@@ -797,7 +813,8 @@ public class GeneratorPanel extends JPanel {
                         lastResult.getFkRelations(),
                         finalIncludeUpdate,
                         subselectStore,
-                        lastResult.getSubselectRows());
+                        lastResult.getSubselectRows(),
+                        fileAlias);
                 }
             }
 
@@ -1039,7 +1056,8 @@ public class GeneratorPanel extends JPanel {
                     lastResult.getFkRelations(),
                     includeUpdate,
                     subselectStore,
-                    lastResult.getSubselectRows());
+                    lastResult.getSubselectRows(),
+                    aliasField.getText().trim());
             }
 
             @Override

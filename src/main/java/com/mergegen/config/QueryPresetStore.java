@@ -69,7 +69,8 @@ public class QueryPresetStore {
                 if (parts.length >= 5 && !parts[4].trim().isEmpty()) {
                     rules = parseRules(parts[4].trim());
                 }
-                entries.add(new QueryPreset(name, table, column, values, rules));
+                String alias = (parts.length >= 7) ? parts[6].trim() : "";
+                entries.add(new QueryPreset(name, table, column, values, rules, alias));
             }
         } catch (IOException ex) {
             System.err.println("query-presets.txt konnte nicht geladen werden: " + ex.getMessage());
@@ -81,14 +82,16 @@ public class QueryPresetStore {
         file.getParentFile().mkdirs();
         try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
             writer.println("# Gespeicherte Abfrage-Presets");
-            writer.println("# Format: NAME|TABLE|COLUMN|VALUE1;VALUE2|TRAVERSAL_RULES");
+            writer.println("# Format: NAME|TABLE|COLUMN|VALUE1;VALUE2|TRAVERSAL_RULES|CONST_TABLES|ALIAS");
             for (QueryPreset p : entries) {
                 writer.println(
                     p.getName()             + SEP +
                     p.getTable()            + SEP +
                     p.getColumn()           + SEP +
                     joinList(p.getValues()) + SEP +
-                    formatRules(p.getTraversalRules())
+                    formatRules(p.getTraversalRules()) + SEP +
+                    SEP +                   // Feld 6 (reserved/const_tables)
+                    p.getAlias()            // Feld 7
                 );
             }
         } catch (IOException ex) {

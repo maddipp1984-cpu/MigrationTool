@@ -269,7 +269,7 @@ class OracleIntegrationTest {
             null,                       // kein Testmodus
             result.getFkRelations(),
             false,                      // kein UPDATE
-            null, null
+            null, null, null
         );
 
         File scriptFile = new File(scriptPath);
@@ -323,7 +323,7 @@ class OracleIntegrationTest {
             null,
             result.getFkRelations(),
             false,
-            null, null
+            null, null, null
         );
 
         String content = Files.readString(new File(scriptPath).toPath());
@@ -364,7 +364,7 @@ class OracleIntegrationTest {
             null, null,
             result.getFkRelations(),
             true,                       // UPDATE aktiviert
-            null, null
+            null, null, null
         );
 
         String content = Files.readString(new File(scriptPath).toPath());
@@ -409,7 +409,7 @@ class OracleIntegrationTest {
             testSuffix,
             result.getFkRelations(),
             false,
-            null, null
+            null, null, null
         );
 
         String content = Files.readString(new File(scriptPath).toPath());
