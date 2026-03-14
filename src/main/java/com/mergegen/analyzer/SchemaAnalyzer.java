@@ -10,6 +10,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
+import java.util.function.Consumer;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -27,10 +28,16 @@ public class SchemaAnalyzer {
 
     private final Connection connection;
     private final String schema;
+    private Consumer<String> triggerLog;
 
     public SchemaAnalyzer(Connection connection, DatabaseConfig config) {
         this.connection = connection;
         this.schema = config.getSchema();
+    }
+
+    /** Setzt einen Logger für Trigger-Erkennung. */
+    public void setTriggerLog(Consumer<String> triggerLog) {
+        this.triggerLog = triggerLog;
     }
 
     /**
@@ -322,7 +329,7 @@ public class SchemaAnalyzer {
      */
     public Optional<String> detectTriggerSequence(String tableName) {
         String sql =
-            "SELECT trigger_body FROM all_triggers " +
+            "SELECT trigger_name, trigger_body FROM all_triggers " +
             "WHERE table_name = ? AND owner = ? " +
             "  AND trigger_type LIKE 'BEFORE%' " +
             "  AND triggering_event LIKE '%INSERT%'";
@@ -334,17 +341,30 @@ public class SchemaAnalyzer {
             ps.setString(2, schema);
             try (ResultSet rs = ps.executeQuery()) {
                 while (rs.next()) {
+                    String triggerName = rs.getString("TRIGGER_NAME");
                     String body = rs.getString("TRIGGER_BODY");
                     if (body == null) continue;
                     Matcher m = nextvalPattern.matcher(body);
                     if (m.find()) {
-                        return Optional.of(m.group(1).toUpperCase());
+                        String seqName = m.group(1).toUpperCase();
+                        if (triggerLog != null) {
+                            triggerLog.accept("Trigger gefunden: " + triggerName
+                                + " auf " + tableName + " → Sequence: " + seqName);
+                        }
+                        return Optional.of(seqName);
+                    }
+                    if (triggerLog != null) {
+                        triggerLog.accept("Trigger gefunden: " + triggerName
+                            + " auf " + tableName + " (keine Sequence erkannt)");
                     }
                 }
             }
         } catch (SQLException ex) {
             // Kein Fehler – Trigger-Erkennung ist nur ein Vorschlag
             System.err.println("Trigger-Sequence-Erkennung fehlgeschlagen: " + ex.getMessage());
+        }
+        if (triggerLog != null) {
+            triggerLog.accept("Kein BEFORE INSERT Trigger auf " + tableName);
         }
         return Optional.empty();
     }

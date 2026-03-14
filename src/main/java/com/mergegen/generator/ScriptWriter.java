@@ -319,6 +319,81 @@ public class ScriptWriter {
     }
 
     /**
+     * Schreibt pro Objekt einen eigenen PL/SQL-Block in eine gemeinsame Datei.
+     * Variablen werden pro Objekt neu deklariert.
+     */
+    public String writePerObject(List<List<TableRow>> rowsPerObject,
+                                  List<Map<String, Integer>> countsPerObject,
+                                  String rootTable, List<String> rootIds,
+                                  String outputDir,
+                                  Map<String, String> sequenceMap,
+                                  String nameColumn,
+                                  String testSuffix,
+                                  Map<String, List<ForeignKeyRelation>> fkRelations,
+                                  boolean includeUpdate) throws IOException {
+
+        String safeTable = rootTable.toUpperCase();
+        if (!safeTable.matches("[A-Z_$#][A-Z0-9_$#]*")) {
+            throw new IllegalArgumentException("Ungültiger Tabellenname: " + rootTable);
+        }
+
+        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        String filename  = "MERGE_" + safeTable + ".sql";
+
+        File tableDir = new File(outputDir, safeTable);
+        tableDir.mkdirs();
+        File[] oldFiles = tableDir.listFiles((d, name) -> name.endsWith(".sql"));
+        if (oldFiles != null) {
+            for (File f : oldFiles) f.delete();
+        }
+
+        // Gesamt-Counts für Header
+        Map<String, Integer> totalCounts = new LinkedHashMap<>();
+        int totalRows = 0;
+        for (Map<String, Integer> counts : countsPerObject) {
+            counts.forEach((t, c) -> totalCounts.merge(t, c, Integer::sum));
+            totalRows += counts.values().stream().mapToInt(Integer::intValue).sum();
+        }
+
+        File outputFile = new File(tableDir, filename);
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(outputFile))) {
+            writeHeader(writer, rootTable, rootIds, totalCounts, timestamp);
+
+            for (int i = 0; i < rowsPerObject.size(); i++) {
+                List<TableRow> rows = rowsPerObject.get(i);
+                Map<String, Integer> counts = countsPerObject.get(i);
+
+                if (rowsPerObject.size() > 1) {
+                    writer.write("\n-- *****************************************************************\n");
+                    writer.write("-- Objekt " + (i + 1) + " von " + rowsPerObject.size());
+                    if (i < rootIds.size()) {
+                        writer.write(": " + rootIds.get(i));
+                    }
+                    writer.write("\n-- *****************************************************************\n");
+                }
+
+                boolean hasChildren = rows.stream()
+                    .anyMatch(r -> !r.getTableName().equalsIgnoreCase(rootTable));
+                boolean needsSkipCheck = !includeUpdate && hasChildren;
+                boolean usePlSql = (sequenceMap != null && !sequenceMap.isEmpty()) || needsSkipCheck;
+
+                if (usePlSql) {
+                    writePlSqlBlock(writer, rows, counts, rootTable, nameColumn,
+                            testSuffix, sequenceMap, fkRelations != null ? fkRelations : new HashMap<>(), includeUpdate);
+                } else {
+                    writePlainStatements(writer, rows, counts, rootTable, nameColumn, testSuffix, sequenceMap, includeUpdate);
+                }
+            }
+
+            writer.write("\n-- Ende des generierten Scripts\n");
+        }
+
+        System.out.println("Script erstellt: " + outputFile.getAbsolutePath());
+        System.out.println("Gesamt: " + totalRows + " MERGE-Statement(s), " + rowsPerObject.size() + " Objekt(e)");
+        return outputFile.getAbsolutePath();
+    }
+
+    /**
      * Wrapper für BufferedWriter.write(), der IOException in RuntimeException
      * umwandelt (nötig in Lambda-Ausdrücken).
      */

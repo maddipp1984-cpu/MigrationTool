@@ -1,13 +1,21 @@
 package com.mergegen.service;
 
 import com.mergegen.analyzer.SchemaAnalyzer;
+import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.VirtualFkStore;
 import com.mergegen.model.DependencyNode;
 import com.mergegen.model.ForeignKeyRelation;
 import com.mergegen.model.TableRow;
 import com.mergegen.model.TraversalResult;
 
+import java.io.IOException;
+import java.io.PrintWriter;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import java.sql.SQLException;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 /**
@@ -25,13 +33,36 @@ import java.util.*;
  */
 public class TraversalService {
 
+    private static final Path LOG_FILE = Paths.get("config", "mergegen", "traversal.log");
+
+    /**
+     * Callback-Interface: Fragt den Benutzer, ob eine FK-Beziehung traversiert werden soll.
+     * Wird aus dem Hintergrundthread aufgerufen – Implementierung muss thread-safe sein.
+     */
+    @FunctionalInterface
+    public interface TraversalDecider {
+        /**
+         * @param parentTable  Tabelle, von der aus traversiert wird
+         * @param childTable   Zieltabelle der FK-Beziehung
+         * @param fkColumn     FK-Spalte
+         * @param rowCount     Anzahl gefundener Zeilen
+         * @return true wenn traversiert werden soll
+         */
+        boolean shouldTraverse(String parentTable, String childTable, String fkColumn, int rowCount);
+    }
+
     private final SchemaAnalyzer analyzer;
     private final VirtualFkStore virtualFkStore;
+    private final TraversalRuleStore ruleStore;
     private java.util.function.Consumer<String> logger;
+    private TraversalDecider decider;
+    private PrintWriter logWriter;
 
-    public TraversalService(SchemaAnalyzer analyzer, VirtualFkStore virtualFkStore) {
+    public TraversalService(SchemaAnalyzer analyzer, VirtualFkStore virtualFkStore,
+                            TraversalRuleStore ruleStore) {
         this.analyzer       = analyzer;
         this.virtualFkStore = virtualFkStore;
+        this.ruleStore      = ruleStore;
     }
 
     /** Setzt einen Logger-Callback für Fortschrittsmeldungen. */
@@ -39,8 +70,38 @@ public class TraversalService {
         this.logger = logger;
     }
 
+    /** Setzt den Callback, der bei unbekannten FK-Beziehungen den Benutzer fragt. */
+    public void setDecider(TraversalDecider decider) {
+        this.decider = decider;
+    }
+
+    private void openLogFile() {
+        try {
+            Files.createDirectories(LOG_FILE.getParent());
+            logWriter = new PrintWriter(Files.newBufferedWriter(LOG_FILE));
+            logWriter.println("=== Traversal gestartet: "
+                + LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss"))
+                + " ===");
+        } catch (IOException e) {
+            // Datei-Logging nicht möglich – kein Abbruch
+        }
+    }
+
+    private void closeLogFile() {
+        if (logWriter != null) {
+            logWriter.println("=== Traversal beendet ===");
+            logWriter.flush();
+            logWriter.close();
+            logWriter = null;
+        }
+    }
+
     private void log(String msg) {
         if (logger != null) logger.accept(msg);
+        if (logWriter != null) {
+            logWriter.println(msg);
+            logWriter.flush();
+        }
     }
 
     /**
@@ -58,6 +119,19 @@ public class TraversalService {
      * @param rootIdValue Suchwert als String (Zahl oder Text – wird automatisch gequotet)
      */
     public TraversalResult traverse(String rootTable, String rootColumn, String rootIdValue) throws SQLException {
+        openLogFile();
+        try {
+            return doTraverse(rootTable, rootColumn, rootIdValue);
+        } catch (SQLException | RuntimeException e) {
+            log("FEHLER: " + e.getClass().getSimpleName() + ": " + e.getMessage());
+            if (logWriter != null) e.printStackTrace(logWriter);
+            throw e;
+        } finally {
+            closeLogFile();
+        }
+    }
+
+    private TraversalResult doTraverse(String rootTable, String rootColumn, String rootIdValue) throws SQLException {
         log("PK ermitteln für " + rootTable + "...");
         List<String> pkCols = analyzer.getPrimaryKeyColumns(rootTable);
         if (pkCols.isEmpty()) {
@@ -75,7 +149,14 @@ public class TraversalService {
 
         // Root-Row per Lookup-Spalte laden
         log("Lade Root-Datensatz: " + rootTable + "." + lookupColumn + " = " + rootValueLiteral);
-        TableRow rootRow = analyzer.fetchRowByPk(rootTable, lookupColumn, rootValueLiteral);
+        TableRow rootRow;
+        try {
+            rootRow = analyzer.fetchRowByPk(rootTable, lookupColumn, rootValueLiteral);
+        } catch (SQLException e) {
+            log("FEHLER beim Laden des Root-Datensatzes: " + e.getMessage());
+            throw e;
+        }
+        log("Root-Datensatz geladen: " + pkCols.size() + " PK-Spalte(n)");
 
         // Für die BFS-Traversal den echten PK-Wert verwenden,
         // da FK-Referenzen immer auf den PK zeigen (nicht auf beliebige Spalten)
@@ -119,10 +200,25 @@ public class TraversalService {
             if (fkValue == null || "NULL".equals(fkValue)) continue;
 
             log("  → " + rel.getParentTable() + "." + rel.getParentPkColumn() + " = " + fkValue);
-            List<TableRow> refRows = analyzer.fetchChildRows(
-                rel.getParentTable(), rel.getParentPkColumn(), fkValue);
+            List<TableRow> refRows;
+            try {
+                refRows = analyzer.fetchChildRows(
+                    rel.getParentTable(), rel.getParentPkColumn(), fkValue);
+            } catch (SQLException e) {
+                log("FEHLER bei ausgehendem FK " + rootTable + "." + rel.getFkColumn()
+                    + " → " + rel.getParentTable() + "." + rel.getParentPkColumn()
+                    + " = " + fkValue + ": " + e.getMessage());
+                throw e;
+            }
             if (refRows.isEmpty()) continue;
             log("    " + refRows.size() + " Zeile(n) gefunden");
+
+            // Traversal-Regel prüfen: soll diese ausgehende FK-Beziehung verfolgt werden?
+            if (!shouldTraverseRelation(rootTable, rel.getParentTable(),
+                    rel.getFkColumn(), refRows.size())) {
+                log("    → Übersprungen (Traversal-Regel)");
+                continue;
+            }
 
             List<String> refPkCols = analyzer.getPrimaryKeyColumns(rel.getParentTable());
             String refPkCol = refPkCols.isEmpty() ? rel.getParentPkColumn() : refPkCols.get(0);
@@ -149,7 +245,73 @@ public class TraversalService {
             }
         }
 
-        // ── BFS: ab den referenzierten Tabellen normal nach unten (eingehende FKs) ──
+        // ── Root: eingehende FKs (Kinder der Root-Tabelle) direkt suchen ──
+        log("Eingehende FK-Spalten suchen für " + rootTable + "...");
+        List<ForeignKeyRelation> rootIncoming = new ArrayList<>(analyzer.getChildRelations(rootTable));
+        if (virtualFkStore != null) {
+            for (ForeignKeyRelation vfk : virtualFkStore.getRelationsForParent(rootTable)) {
+                boolean nowReal = rootIncoming.stream().anyMatch(r ->
+                    r.getChildTable().equalsIgnoreCase(vfk.getChildTable()) &&
+                    r.getFkColumn().equalsIgnoreCase(vfk.getFkColumn()));
+                if (nowReal) {
+                    virtualFkStore.remove(vfk);
+                } else {
+                    rootIncoming.add(vfk);
+                }
+            }
+        }
+
+        for (ForeignKeyRelation rel : rootIncoming) {
+            fkRelations.computeIfAbsent(rel.getChildTable().toUpperCase(), k -> new ArrayList<>())
+                       .add(rel);
+        }
+
+        for (ForeignKeyRelation rel : rootIncoming) {
+            log("  → " + rel.getChildTable() + "." + rel.getFkColumn() + " = " + rootPkLiteral);
+            List<TableRow> childRows;
+            try {
+                childRows = analyzer.fetchChildRows(
+                    rel.getChildTable(), rel.getFkColumn(), rootPkLiteral);
+            } catch (SQLException e) {
+                log("FEHLER bei Kind-Abfrage " + rel.getChildTable() + "." + rel.getFkColumn()
+                    + " = " + rootPkLiteral + ": " + e.getMessage());
+                throw e;
+            }
+            if (childRows.isEmpty()) continue;
+            log("    " + childRows.size() + " Zeile(n) gefunden");
+
+            // Traversal-Regel prüfen
+            if (!shouldTraverseRelation(rootTable, rel.getChildTable(),
+                    rel.getFkColumn(), childRows.size())) {
+                log("    → Übersprungen (Traversal-Regel)");
+                continue;
+            }
+
+            DependencyNode childNode = new DependencyNode(
+                rel.getChildTable(), rel.getFkColumn(), rootPkLiteral, childRows.size());
+            rootNode.addChild(childNode);
+
+            List<String> childPkCols = analyzer.getPrimaryKeyColumns(rel.getChildTable());
+            String childPkCol = childPkCols.isEmpty() ? rel.getFkColumn() : childPkCols.get(0);
+
+            for (TableRow childRow : childRows) {
+                String label = extractLabel(childRow, childPkCols);
+                if (label != null) childNode.addRowLabel(label);
+            }
+
+            for (TableRow childRow : childRows) {
+                String childPkValue = childRow.getPkRawValue(childPkCol);
+                String childKey = buildVisitedKey(rel.getChildTable(), childRow,
+                    childPkCols, childPkValue);
+                if (!visited.contains(childKey)) {
+                    queue.add(new Object[]{
+                        rel.getChildTable(), childPkValue, childRow, childNode
+                    });
+                }
+            }
+        }
+
+        // ── BFS: ab hier normal nach unten (eingehende FKs) ──
         while (!queue.isEmpty()) {
             Object[] entry        = queue.poll();
             String currentTable   = (String) entry[0];
@@ -191,11 +353,24 @@ public class TraversalService {
 
             for (ForeignKeyRelation rel : childRelations) {
                 log("  → " + rel.getChildTable() + "." + rel.getFkColumn() + " = " + currentPkValue);
-                List<TableRow> childRows = analyzer.fetchChildRows(
-                    rel.getChildTable(), rel.getFkColumn(), currentPkValue);
-
+                List<TableRow> childRows;
+                try {
+                    childRows = analyzer.fetchChildRows(
+                        rel.getChildTable(), rel.getFkColumn(), currentPkValue);
+                } catch (SQLException e) {
+                    log("FEHLER bei Kind-Abfrage " + rel.getChildTable() + "." + rel.getFkColumn()
+                        + " = " + currentPkValue + ": " + e.getMessage());
+                    throw e;
+                }
                 if (childRows.isEmpty()) continue;
                 log("    " + childRows.size() + " Zeile(n) gefunden");
+
+                // Traversal-Regel prüfen: soll diese FK-Beziehung verfolgt werden?
+                if (!shouldTraverseRelation(currentTable, rel.getChildTable(),
+                        rel.getFkColumn(), childRows.size())) {
+                    log("    → Übersprungen (Traversal-Regel)");
+                    continue;
+                }
 
                 DependencyNode childNode = new DependencyNode(
                     rel.getChildTable(), rel.getFkColumn(), currentPkValue, childRows.size());
@@ -222,7 +397,105 @@ public class TraversalService {
             }
         }
 
-        return new TraversalResult(rootNode, orderedRows, tableCounts, fkRelations);
+        // Topologische Sortierung: Tabellen, die von anderen referenziert werden, kommen zuerst
+        List<TableRow> sorted = topoSort(orderedRows, fkRelations, rootTable);
+        log("Topologische Sortierung: " + sorted.size() + " Zeilen, Reihenfolge:");
+        String prevTable = null;
+        for (TableRow row : sorted) {
+            if (!row.getTableName().equals(prevTable)) {
+                log("  " + row.getTableName());
+                prevTable = row.getTableName();
+            }
+        }
+
+        return new TraversalResult(rootNode, sorted, tableCounts, fkRelations);
+    }
+
+    /**
+     * Topologische Sortierung der Zeilen nach FK-Abhängigkeiten.
+     * Tabellen, die von anderen Tabellen referenziert werden, kommen zuerst.
+     * Die Root-Tabelle bleibt immer an erster Stelle.
+     * Innerhalb einer Tabelle bleibt die BFS-Reihenfolge erhalten.
+     */
+    private List<TableRow> topoSort(List<TableRow> rows,
+                                     Map<String, List<ForeignKeyRelation>> fkRelations,
+                                     String rootTable) {
+        // Alle Tabellen sammeln (in BFS-Reihenfolge)
+        List<String> tables = new ArrayList<>();
+        for (TableRow row : rows) {
+            String t = row.getTableName().toUpperCase();
+            if (!tables.contains(t)) tables.add(t);
+        }
+
+        // Abhängigkeitsgraph aufbauen: childTable hängt von parentTable ab
+        // (= parentTable muss vor childTable kommen)
+        Map<String, Set<String>> dependsOn = new HashMap<>();
+        for (String t : tables) dependsOn.put(t, new HashSet<>());
+
+        for (Map.Entry<String, List<ForeignKeyRelation>> entry : fkRelations.entrySet()) {
+            for (ForeignKeyRelation rel : entry.getValue()) {
+                String child  = rel.getChildTable().toUpperCase();
+                String parent = rel.getParentTable().toUpperCase();
+                // Nur Abhängigkeiten zwischen Tabellen, die beide im Ergebnis sind
+                if (tables.contains(child) && tables.contains(parent) && !child.equals(parent)) {
+                    dependsOn.computeIfAbsent(child, k -> new HashSet<>()).add(parent);
+                }
+            }
+        }
+
+        // Kahn's Algorithmus (topologische Sortierung)
+        Map<String, Integer> inDegree = new HashMap<>();
+        for (String t : tables) inDegree.put(t, 0);
+        for (Map.Entry<String, Set<String>> e : dependsOn.entrySet()) {
+            inDegree.put(e.getKey(), e.getValue().size());
+        }
+
+        Queue<String> ready = new ArrayDeque<>();
+        // Root-Tabelle zuerst, dann andere ohne Abhängigkeiten
+        String rootUpper = rootTable.toUpperCase();
+        if (inDegree.getOrDefault(rootUpper, 0) == 0) {
+            ready.add(rootUpper);
+        }
+        for (String t : tables) {
+            if (!t.equals(rootUpper) && inDegree.get(t) == 0) {
+                ready.add(t);
+            }
+        }
+
+        List<String> sortedTables = new ArrayList<>();
+        while (!ready.isEmpty()) {
+            String t = ready.poll();
+            sortedTables.add(t);
+            // In-Degree der abhängigen Tabellen reduzieren
+            for (String other : tables) {
+                if (dependsOn.containsKey(other) && dependsOn.get(other).remove(t)) {
+                    int newDegree = inDegree.merge(other, -1, Integer::sum);
+                    if (newDegree == 0) ready.add(other);
+                }
+            }
+        }
+
+        // Falls Zyklen existieren: restliche Tabellen anhängen (BFS-Reihenfolge)
+        for (String t : tables) {
+            if (!sortedTables.contains(t)) {
+                log("  WARNUNG: Zyklische Abhängigkeit bei " + t + " – BFS-Reihenfolge beibehalten");
+                sortedTables.add(t);
+            }
+        }
+
+        // Zeilen nach sortierter Tabellenreihenfolge umordnen
+        Map<String, List<TableRow>> rowsByTable = new LinkedHashMap<>();
+        for (TableRow row : rows) {
+            rowsByTable.computeIfAbsent(row.getTableName().toUpperCase(), k -> new ArrayList<>())
+                       .add(row);
+        }
+
+        List<TableRow> result = new ArrayList<>();
+        for (String t : sortedTables) {
+            List<TableRow> tableRows = rowsByTable.get(t);
+            if (tableRows != null) result.addAll(tableRows);
+        }
+        return result;
     }
 
     /**
@@ -276,6 +549,29 @@ public class TraversalService {
             }
         }
         return null;
+    }
+
+    /**
+     * Prüft ob eine FK-Beziehung traversiert werden soll.
+     * Priorität: 1. gespeicherte Regel → 2. Decider-Callback (Benutzerdialog) → 3. ja
+     */
+    private boolean shouldTraverseRelation(String parentTable, String childTable,
+                                            String fkColumn, int rowCount) {
+        // 1. Gespeicherte Regel vorhanden?
+        if (ruleStore != null && ruleStore.hasRule(parentTable, childTable, fkColumn)) {
+            boolean result = ruleStore.shouldTraverse(parentTable, childTable, fkColumn);
+            log("    Regel: " + parentTable + " → " + childTable + "." + fkColumn
+                + " = " + (result ? "JA" : "NEIN"));
+            return result;
+        }
+
+        // 2. Decider-Callback (Benutzerdialog)?
+        if (decider != null) {
+            return decider.shouldTraverse(parentTable, childTable, fkColumn, rowCount);
+        }
+
+        // 3. Kein Store, kein Decider → traversieren
+        return true;
     }
 
     public static String toSqlLiteral(String value) {

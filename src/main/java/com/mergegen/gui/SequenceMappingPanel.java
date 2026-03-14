@@ -54,7 +54,7 @@ public class SequenceMappingPanel extends JPanel {
     }
 
     private JPanel buildTablePanel() {
-        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+        table.setSelectionMode(ListSelectionModel.MULTIPLE_INTERVAL_SELECTION);
         table.setRowHeight(22);
         table.getTableHeader().setReorderingAllowed(false);
 
@@ -127,17 +127,19 @@ public class SequenceMappingPanel extends JPanel {
     }
 
     private void removeSelected() {
-        int row = table.getSelectedRow();
-        if (row < 0) return;
+        int[] rows = table.getSelectedRows();
+        if (rows.length == 0) return;
 
-        String tableName = (String) tableModel.getValueAt(row, 0);
-        String pkColumn  = (String) tableModel.getValueAt(row, 1);
-
-        store.remove(tableName, pkColumn);
+        for (int i = rows.length - 1; i >= 0; i--) {
+            String tableName = (String) tableModel.getValueAt(rows[i], 0);
+            String pkColumn  = (String) tableModel.getValueAt(rows[i], 1);
+            store.remove(tableName, pkColumn);
+        }
         reload();
     }
 
-    private void reload() {
+    /** Lädt die Tabelle neu aus dem Store. Kann von außen aufgerufen werden. */
+    public void reload() {
         tableModel.setRowCount(0);
         List<SequenceMapping> all = store.getAll();
         for (SequenceMapping m : all) {

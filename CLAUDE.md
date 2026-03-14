@@ -22,11 +22,11 @@ MigrationTool/
 └── src/
     ├── main/java/
     │   ├── com/mergegen/
-    │   │   ├── gui/             (GeneratorPanel, SettingsPanel, VirtualFkPanel, SequenceMappingPanel, MainFrame, GuiApp)
+    │   │   ├── gui/             (GeneratorPanel, SettingsPanel, VirtualFkPanel, SequenceMappingPanel, ConstantTablePanel, MainFrame, GuiApp)
     │   │   ├── analyzer/        (SchemaAnalyzer)
     │   │   ├── service/         (TraversalService)
     │   │   ├── generator/       (MergeScriptGenerator, ScriptWriter)
-    │   │   ├── config/          (AppSettings, ConnectionProfileManager, VirtualFkStore, SequenceMappingStore, QueryPresetStore, TableHistoryStore, DatabaseConfig)
+    │   │   ├── config/          (AppSettings, ConnectionProfileManager, VirtualFkStore, SequenceMappingStore, ConstantTableStore, QueryPresetStore, TableHistoryStore, DatabaseConfig)
     │   │   ├── db/              (DatabaseConnection)
     │   │   └── model/           (ColumnInfo, TableRow, DependencyNode, ForeignKeyRelation, SequenceMapping, TraversalResult, QueryPreset, TableHistoryEntry)
     │   ├── com/excelsplit/      (ExcelSplit, AppConfig, ExcelSplitService, MainPresenter, MainWindow)
@@ -116,6 +116,13 @@ MigrationTool/
 - Beim Generieren: dreistufige Vorschlags-Logik: 1. Store-Eintrag → 2. Trigger-Erkennung → 3. leeres Feld
 - Leere Eingabe = PK-Wert aus Quelle 1:1 übernehmen
 
+### Konstantentabellen (`ConstantTableStore`)
+- Datei: `constant-tables.txt`, Format: ein Tabellenname pro Zeile (uppercase)
+- Global persistent – gelten für alle Analysen/Generierungen
+- Eigener Tab im MergeGen-Bereich (Launcher) bzw. Standalone (MainFrame)
+- In CARD_TREE: Info-Anzeige welche traversierten Tabellen als Konstantentabellen markiert sind
+- Beim Generieren: Datensätze dieser Tabellen werden aus dem MERGE-Script gefiltert, FK-Werte bleiben als Literale
+
 ### Testmodus
 - Checkbox im Eingabe-Formular; Timestamp-Suffix (`_yyyyMMddHHmmss`) an SQL-Literal der Suchspalte
 - MERGE matcht nie → immer INSERT → jeder Testlauf legt neues Objekt an
@@ -125,6 +132,7 @@ MigrationTool/
 - PK-Spalten mit Sequence: `SEQ.NEXTVAL` im USING-SELECT statt Quell-PK-Wert
 - **Optional UPDATE**: Checkbox „Bei Übereinstimmung aktualisieren" → `WHEN MATCHED THEN UPDATE SET` für alle Nicht-PK-Spalten (Sequence/ColVar-Spalten ausgenommen)
 - **Skip-Check bei INSERT-only**: wenn kein UPDATE + Child-Tabellen vorhanden → PL/SQL-Block mit `SQL%ROWCOUNT`-Prüfung nach Root-MERGEs; wenn kein Root-Datensatz eingefügt → `RETURN`
+- **Per-Object-Generierung**: bei mehreren Objekten (Werten) erzeugt `ScriptWriter.writePerObject()` separate PL/SQL-Blöcke pro Objekt mit jeweils frischen DECLARE-Variablen; Konstantentabellen-Filter wird pro Objekt angewendet
 
 ### Query-Presets (`QueryPresetStore`)
 - Datei: `query-presets.txt`, Format: `NAME|TABLE|COLUMN|VALUE1;VALUE2|CONST1;CONST2`
@@ -217,6 +225,7 @@ config/
 │   ├── connections/             – JDBC-Profile (url, user, password, schema)
 │   ├── virtual-fks.txt          – Manuelle FK-Definitionen
 │   ├── sequence-mappings.txt    – Sequence-Zuordnungen
+│   ├── constant-tables.txt      – Konstantentabellen (kein MERGE)
 │   ├── query-presets.txt        – Gespeicherte Abfragen
 │   └── table-history.txt        – Analyse-Verlauf
 ├── excelsplit/

@@ -4,13 +4,16 @@ import com.excelsplit.AppConfig;
 import com.excelsplit.ExcelSplitService;
 import com.excelsplit.MainPresenter;
 import com.excelsplit.MainWindow;
+import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.TableHistoryStore;
+import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.VirtualFkStore;
 import com.kostenattribute.InsertGenPanel;
 import com.migrationtool.scriptexec.ScriptExecutorPanel;
 import com.migrationtool.scriptexec.ZielDbPanel;
+import com.mergegen.gui.ConstantTablePanel;
 import com.mergegen.gui.GeneratorPanel;
 import com.mergegen.gui.SequenceMappingPanel;
 import com.mergegen.gui.SettingsPanel;
@@ -51,19 +54,26 @@ public class LauncherApp {
 
         // ── MergeGen-Stores ───────────────────────────────────────────────────
         VirtualFkStore       virtualFkStore = new VirtualFkStore();
+        TraversalRuleStore   ruleStore      = new TraversalRuleStore();
         SequenceMappingStore seqStore       = new SequenceMappingStore();
         QueryPresetStore     presetStore    = new QueryPresetStore();
         TableHistoryStore    historyStore   = new TableHistoryStore();
 
+        // ── MergeGen-Stores (Konstantentabellen) ────────────────────────────
+        ConstantTableStore   constTableStore = new ConstantTableStore();
+
         // ── MergeGen-Panels ───────────────────────────────────────────────────
-        GeneratorPanel       generatorPanel = new GeneratorPanel(settingsPanel, virtualFkStore, seqStore, presetStore, historyStore);
+        GeneratorPanel       generatorPanel = new GeneratorPanel(settingsPanel, virtualFkStore, ruleStore, seqStore, constTableStore, presetStore, historyStore);
         VirtualFkPanel       vfkPanel       = new VirtualFkPanel(virtualFkStore);
         SequenceMappingPanel seqPanel       = new SequenceMappingPanel(seqStore);
+        ConstantTablePanel   constPanel     = new ConstantTablePanel(constTableStore);
+        generatorPanel.setSequenceMappingPanel(seqPanel);
 
         JTabbedPane mergeGenPane = new JTabbedPane();
-        mergeGenPane.addTab("Generator",         generatorPanel);
-        mergeGenPane.addTab("Virtuelle FKs",     vfkPanel);
-        mergeGenPane.addTab("Sequence-Mappings", seqPanel);
+        mergeGenPane.addTab("Generator",            generatorPanel);
+        mergeGenPane.addTab("Virtuelle FKs",        vfkPanel);
+        mergeGenPane.addTab("Sequence-Mappings",    seqPanel);
+        mergeGenPane.addTab("Konstantentabellen",   constPanel);
 
         // ── ExcelSplit-Panel ──────────────────────────────────────────────────
         Path          basePath      = detectLauncherBasePath();

@@ -2,9 +2,11 @@ package com.mergegen.gui;
 
 import com.mergegen.analyzer.SchemaAnalyzer;
 import com.mergegen.config.AppSettings;
+import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.TableHistoryStore;
+import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.VirtualFkStore;
 import com.mergegen.model.QueryPreset;
 import com.mergegen.model.TableHistoryEntry;
@@ -63,6 +65,8 @@ public class GeneratorPanel extends JPanel {
     private final JLabel  treeInfo    = new JLabel(" ");
     private final JButton generateBtn = new JButton("Merge Scripts erzeugen");
     private final JButton backBtn     = new JButton("← Zurück");
+    // Konstantentabellen-Anzeige (Tree-Karte, nur Info – Verwaltung im eigenen Tab)
+    private final JPanel  constPanel  = new JPanel();
 
     // Step 3 – Ergebnis
     private final JTextArea resultArea = new JTextArea(6, 50);
@@ -71,13 +75,17 @@ public class GeneratorPanel extends JPanel {
     // Zwischengespeichertes Traversal-Ergebnis: wird in startAnalysis() befüllt
     // und in startGeneration() verwendet, damit die DB nur einmal abgefragt wird.
     private TraversalResult lastResult;
+    // Einzelergebnisse pro Objekt (für objektweise Script-Generierung)
+    private List<TraversalResult> lastResultsPerObject;
     private String          lastTable;
     private String          lastColumn = "";
     private List<String>    lastIds;
 
     private final AppSettings  appSettings  = new AppSettings();
     private final VirtualFkStore virtualFkStore;
+    private final TraversalRuleStore ruleStore;
     private final SequenceMappingStore seqStore;
+    private final ConstantTableStore constTableStore;
     private final QueryPresetStore presetStore;
     private final TableHistoryStore historyStore;
 
@@ -91,15 +99,22 @@ public class GeneratorPanel extends JPanel {
     private final JButton           deletePresetBtn = new JButton("Löschen");
     private final JButton           savePresetBtn   = new JButton("Als Preset speichern");
 
+    // Referenz auf SequenceMappingPanel für Refresh nach Generierung
+    private SequenceMappingPanel seqMappingPanel;
+
 
     public GeneratorPanel(SettingsPanel settingsPanel, VirtualFkStore virtualFkStore,
-                          SequenceMappingStore seqStore, QueryPresetStore presetStore,
+                          TraversalRuleStore ruleStore,
+                          SequenceMappingStore seqStore, ConstantTableStore constTableStore,
+                          QueryPresetStore presetStore,
                           TableHistoryStore historyStore) {
-        this.settingsPanel  = settingsPanel;
-        this.virtualFkStore = virtualFkStore;
-        this.seqStore       = seqStore;
-        this.presetStore    = presetStore;
-        this.historyStore        = historyStore;
+        this.settingsPanel   = settingsPanel;
+        this.virtualFkStore  = virtualFkStore;
+        this.ruleStore       = ruleStore;
+        this.seqStore        = seqStore;
+        this.constTableStore = constTableStore;
+        this.presetStore     = presetStore;
+        this.historyStore    = historyStore;
         setLayout(new BorderLayout());
         // Alle drei Karten registrieren; sichtbar ist anfangs nur CARD_INPUT
         cardPane.add(buildInputCard(),  CARD_INPUT);
@@ -108,6 +123,17 @@ public class GeneratorPanel extends JPanel {
         add(cardPane, BorderLayout.CENTER);
         refreshPresetCombo();
         refreshHistoryList();
+
+        // Letzte Eingaben aus app.properties vorbelegen
+        String savedTable  = appSettings.getLastTable();
+        String savedColumn = appSettings.getLastColumn();
+        if (savedTable != null && !savedTable.isEmpty()) tableField.setText(savedTable);
+        if (savedColumn != null && !savedColumn.isEmpty()) columnField.setText(savedColumn);
+    }
+
+    /** Setzt die Referenz auf das SequenceMappingPanel für automatischen Refresh. */
+    public void setSequenceMappingPanel(SequenceMappingPanel panel) {
+        this.seqMappingPanel = panel;
     }
 
     // ── Card 1: Eingabe ───────────────────────────────────────────────────────
@@ -133,6 +159,7 @@ public class GeneratorPanel extends JPanel {
                 tableField.setText(preset.getTable());
                 columnField.setText(preset.getColumn());
                 valueArea.setText(String.join("\n", preset.getValues()));
+                ruleStore.loadFrom(preset.getTraversalRules());
             });
         });
 
@@ -305,6 +332,9 @@ public class GeneratorPanel extends JPanel {
         if (table.isEmpty())  { setInputStatus("Bitte Tabellenname eingeben."); return; }
         if (values.isEmpty()) { setInputStatus("Bitte mindestens einen Wert eingeben."); return; }
 
+        // Traversal-Regeln zurücksetzen (werden im Dialog neu abgefragt)
+        ruleStore.clear();
+
         setInputStatus("Analysiere...");
         analyzeBtn.setEnabled(false);
 
@@ -314,17 +344,20 @@ public class GeneratorPanel extends JPanel {
                 var config = settingsPanel.getCurrentConfig();
                 try (DatabaseConnection conn = new DatabaseConnection(config)) {
                     SchemaAnalyzer   analyzer = new SchemaAnalyzer(conn.get(), config);
-                    TraversalService service  = new TraversalService(analyzer, virtualFkStore);
+                    TraversalService service  = new TraversalService(analyzer, virtualFkStore, ruleStore);
                     service.setLogger(this::publish);
-
-                    if (values.size() == 1) {
-                        return service.traverse(table, column, values.get(0));
-                    }
+                    service.setDecider(GeneratorPanel.this::askTraversalDecision);
 
                     List<TraversalResult> results = new java.util.ArrayList<>();
                     for (int i = 0; i < values.size(); i++) {
-                        publish("Analysiere Wert " + (i + 1) + " von " + values.size() + "...");
+                        if (values.size() > 1) {
+                            publish("Analysiere Wert " + (i + 1) + " von " + values.size() + "...");
+                        }
                         results.add(service.traverse(table, column, values.get(i)));
+                    }
+                    lastResultsPerObject = results;
+                    if (results.size() == 1) {
+                        return results.get(0);
                     }
                     return TraversalResult.merge(results);
                 }
@@ -382,9 +415,19 @@ public class GeneratorPanel extends JPanel {
         renderer.setLeafIcon(renderer.getClosedIcon());
         depTree.setCellRenderer(renderer);
 
-        JScrollPane scroll = new JScrollPane(depTree);
-        scroll.setPreferredSize(new Dimension(500, 300));
-        p.add(scroll, BorderLayout.CENTER);
+        JScrollPane treeScroll = new JScrollPane(depTree);
+        treeScroll.setPreferredSize(new Dimension(500, 300));
+
+        // Konstantentabellen-Anzeige (rechts neben dem Baum, nur Info)
+        constPanel.setLayout(new BoxLayout(constPanel, BoxLayout.Y_AXIS));
+        JPanel constWrapper = new JPanel(new BorderLayout());
+        constWrapper.setBorder(javax.swing.BorderFactory.createTitledBorder("Kein MERGE für:"));
+        constWrapper.add(new JScrollPane(constPanel), BorderLayout.CENTER);
+        constWrapper.setPreferredSize(new Dimension(200, 0));
+
+        JSplitPane splitPane = new JSplitPane(JSplitPane.HORIZONTAL_SPLIT, treeScroll, constWrapper);
+        splitPane.setResizeWeight(1.0);
+        p.add(splitPane, BorderLayout.CENTER);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         buttons.add(backBtn);
@@ -441,7 +484,7 @@ public class GeneratorPanel extends JPanel {
             .filter(s -> !s.isEmpty())
             .collect(Collectors.toList());
 
-        presetStore.add(new QueryPreset(finalName, table, column, values));
+        presetStore.add(new QueryPreset(finalName, table, column, values, ruleStore.getAll()));
 
         // 6. Combo aktualisieren und neues Preset auswählen
         refreshPresetCombo();
@@ -451,7 +494,7 @@ public class GeneratorPanel extends JPanel {
     /**
      * Befüllt den Abhängigkeitsbaum mit dem TraversalResult und wechselt zur Tree-Karte.
      * Der Baum wird nach dem Befüllen vollständig aufgeklappt.
-     * Anschließend wird die Checkbox-Liste der Konstantentabellen neu aufgebaut.
+     * Anschließend wird die Info-Liste der Konstantentabellen aus dem Store aufgebaut.
      */
     private void showTreeCard(TraversalResult result) {
         DefaultMutableTreeNode root = buildTreeNodes(result.getRootNode());
@@ -462,6 +505,30 @@ public class GeneratorPanel extends JPanel {
         Map<String, Integer> counts = result.getTableCounts();
         treeInfo.setText("Gefunden: " + total + " Datensatz" + (total != 1 ? "e" : "")
                 + " in " + counts.size() + " Tabelle" + (counts.size() != 1 ? "n" : ""));
+
+        // Konstantentabellen-Info aufbauen (aus globalem Store)
+        constPanel.removeAll();
+        Set<String> constTables = constTableStore.getAsSet();
+        String rootTable = result.getRootNode().getTableName();
+        boolean anyExcluded = false;
+        for (String table : counts.keySet()) {
+            if (table.equalsIgnoreCase(rootTable)) continue;
+            if (constTables.contains(table.toUpperCase())) {
+                JLabel lbl = new JLabel("\u2717 " + table + " (" + counts.get(table) + ")");
+                lbl.setForeground(new Color(180, 60, 60));
+                lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+                constPanel.add(lbl);
+                anyExcluded = true;
+            }
+        }
+        if (!anyExcluded) {
+            JLabel lbl = new JLabel("(keine)");
+            lbl.setForeground(Color.GRAY);
+            lbl.setAlignmentX(Component.LEFT_ALIGNMENT);
+            constPanel.add(lbl);
+        }
+        constPanel.revalidate();
+        constPanel.repaint();
 
         cards.show(cardPane, CARD_TREE);
     }
@@ -502,9 +569,13 @@ public class GeneratorPanel extends JPanel {
         resultArea.setFont(new Font(Font.MONOSPACED, Font.PLAIN, 12));
         p.add(new JScrollPane(resultArea), BorderLayout.CENTER);
 
+        JButton backToTreeBtn = new JButton("← Zurück zum Baum");
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
+        buttons.add(backToTreeBtn);
         buttons.add(newBtn);
         p.add(buttons, BorderLayout.SOUTH);
+
+        backToTreeBtn.addActionListener(e -> cards.show(cardPane, CARD_TREE));
 
         // "Neue Abfrage": Formular leeren, Ergebnis verwerfen, zurück zur Eingabe
         newBtn.addActionListener(e -> {
@@ -531,7 +602,15 @@ public class GeneratorPanel extends JPanel {
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
             : "";
 
-        List<TableRow> filteredRows = new ArrayList<>(lastResult.getOrderedRows());
+        // Konstantentabellen aus globalem Store (kein MERGE, FK-Werte bleiben als Literale)
+        Set<String> excludedTables = constTableStore.getAsSet();
+
+        List<TableRow> filteredRows = new ArrayList<>();
+        for (TableRow row : lastResult.getOrderedRows()) {
+            if (!excludedTables.contains(row.getTableName().toUpperCase())) {
+                filteredRows.add(row);
+            }
+        }
 
         Map<String, Integer> filteredCounts = new LinkedHashMap<>();
         for (TableRow row : filteredRows) {
@@ -560,6 +639,13 @@ public class GeneratorPanel extends JPanel {
             var config = settingsPanel.getCurrentConfig();
             triggerConn = new DatabaseConnection(config);
             triggerAnalyzer = new SchemaAnalyzer(triggerConn.get(), config);
+            triggerAnalyzer.setTriggerLog(msg -> {
+                // In traversal.log schreiben (append)
+                try (java.io.PrintWriter w = new java.io.PrintWriter(
+                        new java.io.FileWriter("config/mergegen/traversal.log", true))) {
+                    w.println(msg);
+                } catch (java.io.IOException ignored) {}
+            });
         } catch (Exception ex) {
             // Trigger-Erkennung nicht möglich – kein Abbruch, nur kein Vorschlag
         }
@@ -634,25 +720,61 @@ public class GeneratorPanel extends JPanel {
         backBtn.setEnabled(false);
 
         Map<String, String> finalSeqMap = sequenceMap;
-        List<TableRow> finalFilteredRows = filteredRows;
-        Map<String, Integer> finalFilteredCounts = filteredCounts;
         String finalNameColumn = nameColumn;
         String finalTestSuffix = testSuffix;
         boolean finalIncludeUpdate = updateCheck.isSelected();
+
+        // Per-Object-Daten vorbereiten (Filterung pro Objekt)
+        final List<List<TableRow>> perObjectRows = new ArrayList<>();
+        final List<Map<String, Integer>> perObjectCounts = new ArrayList<>();
+
+        if (lastResultsPerObject != null && lastResultsPerObject.size() > 1) {
+            for (TraversalResult objResult : lastResultsPerObject) {
+                List<TableRow> objFiltered = new ArrayList<>();
+                for (TableRow row : objResult.getOrderedRows()) {
+                    if (!excludedTables.contains(row.getTableName().toUpperCase())) {
+                        objFiltered.add(row);
+                    }
+                }
+                Map<String, Integer> objCounts = new LinkedHashMap<>();
+                for (TableRow row : objFiltered) {
+                    objCounts.merge(row.getTableName(), 1, Integer::sum);
+                }
+                perObjectRows.add(objFiltered);
+                perObjectCounts.add(objCounts);
+            }
+        }
+
+        List<TableRow> finalFilteredRows = filteredRows;
+        Map<String, Integer> finalFilteredCounts = filteredCounts;
+
         SwingWorker<String, Void> worker = new SwingWorker<>() {
             @Override
             protected String doInBackground() throws Exception {
                 ScriptWriter writer = new ScriptWriter();
-                return writer.write(
-                    finalFilteredRows,
-                    finalFilteredCounts,
-                    lastTable, lastIds,
-                    settingsPanel.getOutputDir(),
-                    finalSeqMap,
-                    finalNameColumn,
-                    finalTestSuffix,
-                    lastResult.getFkRelations(),
-                    finalIncludeUpdate);
+                if (perObjectRows.size() > 1) {
+                    return writer.writePerObject(
+                        perObjectRows,
+                        perObjectCounts,
+                        lastTable, lastIds,
+                        settingsPanel.getOutputDir(),
+                        finalSeqMap,
+                        finalNameColumn,
+                        finalTestSuffix,
+                        lastResult.getFkRelations(),
+                        finalIncludeUpdate);
+                } else {
+                    return writer.write(
+                        finalFilteredRows,
+                        finalFilteredCounts,
+                        lastTable, lastIds,
+                        settingsPanel.getOutputDir(),
+                        finalSeqMap,
+                        finalNameColumn,
+                        finalTestSuffix,
+                        lastResult.getFkRelations(),
+                        finalIncludeUpdate);
+                }
             }
 
             @Override
@@ -662,15 +784,19 @@ public class GeneratorPanel extends JPanel {
                 try {
                     String filename = get();
                     int total = finalFilteredRows.size();
+                    String objInfo = perObjectRows.size() > 1
+                        ? "Objekte:      " + perObjectRows.size() + "\n" : "";
                     resultArea.setText(
                         "Script erfolgreich erstellt!\n\n" +
                         "Datei:        " + filename + "\n" +
+                        objInfo +
                         "Statements:   " + total + "\n" +
                         "Tabellen:     " + finalFilteredCounts.size() + "\n\n" +
                         "Tabellenübersicht:\n" +
                         buildSummary(finalFilteredCounts)
                     );
                     cards.show(cardPane, CARD_RESULT);
+                    if (seqMappingPanel != null) seqMappingPanel.reload();
                 } catch (Exception ex) {
                     JOptionPane.showMessageDialog(GeneratorPanel.this,
                         "Fehler bei der Generierung:\n" + rootCause(ex),
@@ -815,7 +941,7 @@ public class GeneratorPanel extends JPanel {
                 var config = settingsPanel.getCurrentConfig();
                 try (DatabaseConnection conn = new DatabaseConnection(config)) {
                     SchemaAnalyzer   analyzer = new SchemaAnalyzer(conn.get(), config);
-                    TraversalService service  = new TraversalService(analyzer, virtualFkStore);
+                    TraversalService service  = new TraversalService(analyzer, virtualFkStore, ruleStore);
                     if (values.size() == 1) {
                         return service.traverse(table, column, values.get(0));
                     }
@@ -896,6 +1022,41 @@ public class GeneratorPanel extends JPanel {
                 catch (Exception ex) { onComplete.accept(false); }
             }
         }.execute();
+    }
+
+    /**
+     * Wird aus dem Hintergrundthread aufgerufen (TraversalDecider-Callback).
+     * Zeigt einen Dialog auf dem EDT und wartet auf die Antwort.
+     * Bei "Entscheidung merken" wird die Regel im Store gespeichert.
+     */
+    private boolean askTraversalDecision(String parentTable, String childTable,
+                                          String fkColumn, int rowCount) {
+        final boolean[] result = {true};
+        try {
+            javax.swing.SwingUtilities.invokeAndWait(() -> {
+                Object[] message = {
+                    "FK-Beziehung gefunden:",
+                    parentTable + " → " + childTable + "." + fkColumn,
+                    rowCount + " Zeile(n) gefunden.",
+                    " ",
+                    "Soll diese Beziehung traversiert werden?",
+                    "(Entscheidung wird beim Preset-Speichern gesichert)"
+                };
+                int choice = JOptionPane.showConfirmDialog(
+                    GeneratorPanel.this, message,
+                    "Traversal-Entscheidung",
+                    JOptionPane.YES_NO_OPTION,
+                    JOptionPane.QUESTION_MESSAGE);
+                result[0] = (choice == JOptionPane.YES_OPTION);
+                ruleStore.setRule(parentTable, childTable, fkColumn, result[0]);
+                if (!result[0]) {
+                    constTableStore.add(childTable);
+                }
+            });
+        } catch (Exception e) {
+            // Bei Fehler: traversieren
+        }
+        return result[0];
     }
 
     /** Erstellt einen GridBagConstraints-Helfer mit voreingestellten Abständen. */

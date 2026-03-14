@@ -1,8 +1,10 @@
 package com.mergegen.gui;
 
+import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.TableHistoryStore;
+import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.VirtualFkStore;
 
 import javax.swing.*;
@@ -20,20 +22,25 @@ public class MainFrame extends JFrame {
         setMinimumSize(new Dimension(650, 480));
         setIconImages(createAppIcons());
 
-        VirtualFkStore        virtualFkStore = new VirtualFkStore();
-        SequenceMappingStore  seqStore       = new SequenceMappingStore();
-        QueryPresetStore      presetStore    = new QueryPresetStore();
-        TableHistoryStore     historyStore   = new TableHistoryStore();
-        SettingsPanel         settingsPanel  = new SettingsPanel();
-        GeneratorPanel        generatorPanel = new GeneratorPanel(settingsPanel, virtualFkStore, seqStore, presetStore, historyStore);
-        VirtualFkPanel        virtualFkPanel = new VirtualFkPanel(virtualFkStore);
-        SequenceMappingPanel  seqPanel       = new SequenceMappingPanel(seqStore);
+        VirtualFkStore        virtualFkStore  = new VirtualFkStore();
+        TraversalRuleStore    ruleStore       = new TraversalRuleStore();
+        SequenceMappingStore  seqStore        = new SequenceMappingStore();
+        ConstantTableStore    constTableStore = new ConstantTableStore();
+        QueryPresetStore      presetStore     = new QueryPresetStore();
+        TableHistoryStore     historyStore    = new TableHistoryStore();
+        SettingsPanel         settingsPanel   = new SettingsPanel();
+        GeneratorPanel        generatorPanel  = new GeneratorPanel(settingsPanel, virtualFkStore, ruleStore, seqStore, constTableStore, presetStore, historyStore);
+        VirtualFkPanel        virtualFkPanel  = new VirtualFkPanel(virtualFkStore);
+        SequenceMappingPanel  seqPanel        = new SequenceMappingPanel(seqStore);
+        ConstantTablePanel    constPanel      = new ConstantTablePanel(constTableStore);
+        generatorPanel.setSequenceMappingPanel(seqPanel);
 
         JTabbedPane tabs = new JTabbedPane();
-        tabs.addTab("Generator",          new ImageIcon(), generatorPanel, "Merge Scripts erzeugen");
-        tabs.addTab("Einstellungen",      new ImageIcon(), settingsPanel,  "Datenbankverbindung konfigurieren");
-        tabs.addTab("Virtuelle FKs",      new ImageIcon(), virtualFkPanel, "Manuelle FK-Definitionen verwalten");
-        tabs.addTab("Sequence-Mappings",  new ImageIcon(), seqPanel,       "Sequence-Zuordnungen verwalten");
+        tabs.addTab("Generator",           new ImageIcon(), generatorPanel, "Merge Scripts erzeugen");
+        tabs.addTab("Einstellungen",       new ImageIcon(), settingsPanel,  "Datenbankverbindung konfigurieren");
+        tabs.addTab("Virtuelle FKs",       new ImageIcon(), virtualFkPanel, "Manuelle FK-Definitionen verwalten");
+        tabs.addTab("Sequence-Mappings",   new ImageIcon(), seqPanel,       "Sequence-Zuordnungen verwalten");
+        tabs.addTab("Konstantentabellen",  new ImageIcon(), constPanel,     "Tabellen ohne MERGE verwalten");
 
         add(tabs, BorderLayout.CENTER);
         pack();

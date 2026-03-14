@@ -3,11 +3,7 @@ package com.mergegen.config;
 import com.mergegen.model.QueryPreset;
 
 import java.io.*;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.stream.Collectors;
 
 /**
@@ -68,7 +64,11 @@ public class QueryPresetStore {
                 String       table  = parts[1].trim();
                 String       column = parts[2].trim();
                 List<String> values = splitList(parts[3]);
-                entries.add(new QueryPreset(name, table, column, values));
+                Map<String, Boolean> rules = new LinkedHashMap<>();
+                if (parts.length >= 5 && !parts[4].trim().isEmpty()) {
+                    rules = parseRules(parts[4].trim());
+                }
+                entries.add(new QueryPreset(name, table, column, values, rules));
             }
         } catch (IOException ex) {
             System.err.println("query-presets.txt konnte nicht geladen werden: " + ex.getMessage());
@@ -80,13 +80,14 @@ public class QueryPresetStore {
         file.getParentFile().mkdirs();
         try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
             writer.println("# Gespeicherte Abfrage-Presets");
-            writer.println("# Format: NAME|TABLE|COLUMN|VALUE1;VALUE2");
+            writer.println("# Format: NAME|TABLE|COLUMN|VALUE1;VALUE2|TRAVERSAL_RULES");
             for (QueryPreset p : entries) {
                 writer.println(
                     p.getName()             + SEP +
                     p.getTable()            + SEP +
                     p.getColumn()           + SEP +
-                    joinList(p.getValues())
+                    joinList(p.getValues()) + SEP +
+                    formatRules(p.getTraversalRules())
                 );
             }
         } catch (IOException ex) {
@@ -105,5 +106,32 @@ public class QueryPresetStore {
 
     private static String joinList(List<String> list) {
         return String.join(LIST_SEP, list);
+    }
+
+    /**
+     * Parst Traversal-Regeln aus dem Format: PARENT>CHILD.FK=JA;PARENT>CHILD.FK=NEIN
+     */
+    private static Map<String, Boolean> parseRules(String s) {
+        Map<String, Boolean> rules = new LinkedHashMap<>();
+        for (String part : s.split(LIST_SEP, -1)) {
+            part = part.trim();
+            if (part.isEmpty()) continue;
+            int eq = part.lastIndexOf('=');
+            if (eq < 0) continue;
+            String key = part.substring(0, eq).trim();
+            String val = part.substring(eq + 1).trim();
+            rules.put(key, "JA".equalsIgnoreCase(val));
+        }
+        return rules;
+    }
+
+    /**
+     * Formatiert Traversal-Regeln: PARENT>CHILD.FK=JA;PARENT>CHILD.FK=NEIN
+     */
+    private static String formatRules(Map<String, Boolean> rules) {
+        if (rules == null || rules.isEmpty()) return "";
+        return rules.entrySet().stream()
+            .map(e -> e.getKey() + "=" + (e.getValue() ? "JA" : "NEIN"))
+            .collect(Collectors.joining(LIST_SEP));
     }
 }
