@@ -38,7 +38,7 @@ MigrationTool/
     │   │   ├── analyzer/        (SchemaAnalyzer)
     │   │   ├── service/         (TraversalService)
     │   │   ├── generator/       (MergeScriptGenerator, ScriptWriter)
-    │   │   ├── config/          (AppSettings, ConnectionProfileManager, VirtualFkStore, SequenceMappingStore, ConstantTableStore, QueryPresetStore, DatabaseConfig)
+    │   │   ├── config/          (AppSettings, ConnectionProfileManager, VirtualFkStore, SequenceMappingStore, ConstantTableStore, QueryPresetStore, GlobalTraversalRuleStore, DatabaseConfig)
     │   │   ├── db/              (DatabaseConnection)
     │   │   └── model/           (ColumnInfo, TableRow, DependencyNode, ForeignKeyRelation, SequenceMapping, TraversalResult, QueryPreset)
     │   ├── com/excelsplit/      (ExcelSplit, AppConfig, ExcelSplitService, MainPresenter, MainWindow)
@@ -51,7 +51,7 @@ MigrationTool/
 
 ```bash
 ./gradlew test
-# → 54 Unit-Tests (MergeGen + SubselectMapping); ExcelSplit hat keine Tests
+# → 62 Unit-Tests (MergeGen + SubselectMapping + GlobalTraversalRuleStore); ExcelSplit hat keine Tests
 
 ./gradlew integrationTest
 # → 18 Integration-Tests gegen Oracle XE (Docker)
@@ -138,6 +138,16 @@ MigrationTool/
 - **Skip-Check bei INSERT-only**: wenn kein UPDATE + Child-Tabellen vorhanden → PL/SQL-Block mit `SQL%ROWCOUNT`-Prüfung nach Root-MERGEs; wenn kein Root-Datensatz eingefügt → `RETURN`
 - **Per-Object-Generierung**: bei mehreren Objekten (Werten) erzeugt `ScriptWriter.writePerObject()` separate PL/SQL-Blöcke pro Objekt mit jeweils frischen DECLARE-Variablen; Konstantentabellen-Filter wird pro Objekt angewendet
 
+### Globale Traversal-Regeln (`GlobalTraversalRuleStore`)
+- Datei: `traversal-rules.txt`, Format: `ROOT_TABLE|PARENT>CHILD.FK=JA;PARENT>CHILD.FK=NEIN;...`
+- Beim Start der Analyse: wenn Regeln für die Root-Tabelle existieren, Dialog „Übernehmen / Neu eingeben / Abbrechen"
+- Nach erfolgreicher Analyse: aktuelle Regeln automatisch gespeichert/aktualisiert
+- Greift nur wenn kein Preset aktiv ist (Presets bringen eigene Regeln mit)
+
+### Sequence-Skip
+- Wenn `SequenceMappingStore` bereits einen Eintrag für Tabelle+PK hat: Dialog überspringen, gespeicherten Wert direkt verwenden
+- Nur für neue/unbekannte Tabellen wird der Sequence-Dialog angezeigt
+
 ### Query-Presets (`QueryPresetStore`)
 - Datei: `query-presets.txt`, Format: `NAME|TABLE|COLUMN|VALUE1;VALUE2|CONST1;CONST2`
 - UI: Preset-Leiste (NORTH in CARD_INPUT) mit Dropdown + Löschen; „Als Preset speichern"-Button in CARD_TREE
@@ -146,12 +156,13 @@ MigrationTool/
 - Drei Felder: Führende Tabelle | Spaltenname (optional, leer = PK auto) | Wert
 - Letzte Tabelle + Spalte werden in `app.properties` gespeichert und beim nächsten Start vorausgefüllt
 
-### Unit-Tests (54 Tests, keine DB nötig)
+### Unit-Tests (62 Tests, keine DB nötig)
 - **MergeScriptGeneratorTest** (12): MERGE-SQL-Struktur, Sequence-Ersetzung, Prioritätskette (ColVar > Seq > Literal), Testmodus-Suffix, ON-Klausel, UPDATE-Block
 - **SubselectGeneratorTest** (3): Subselect-Ersetzung im USING-SELECT, Priorität ColVar > Subselect, Original-Literal ohne Subselect
 - **ScriptWriterTest** (16): `buildVarName` (30-Zeichen-Limit), `buildColVarSubstitutions`, Plain vs. PL/SQL-Mode, Typ-Erkennung, 4-Ebenen-FK-Kette, 2-Root-Rows, Skip-Check
 - **TraversalServiceTest** (12): `toSqlLiteral()` – Zahlen, Strings, Escaping, Null/Blank
 - **SubselectMappingStoreTest** (8): Add/Get, Composite-Lookup, Case-Insensitiv, Remove, Persistenz-Roundtrip, buildSubselect
+- **GlobalTraversalRuleStoreTest** (8): Save/Get, Case-Insensitiv, Update, Multiple Tables, Persistenz-Roundtrip, Empty-Remove, Subselect
 - Refactoring für Testbarkeit: `ScriptWriter.buildVarName()` + `buildColVarSubstitutions()` sind package-private
 
 ---
@@ -232,7 +243,8 @@ config/
 │   ├── sequence-mappings.txt    – Sequence-Zuordnungen
 │   ├── constant-tables.txt      – Konstantentabellen (kein MERGE)
 │   ├── subselect-mappings.txt   – Subselect-FK-Mappings (TABLE|PK|LOOKUP_COLS)
-│   └── query-presets.txt        – Gespeicherte Abfragen
+│   ├── query-presets.txt        – Gespeicherte Abfragen
+│   └── traversal-rules.txt     – Globale Traversal-Regeln pro Root-Tabelle
 ├── excelsplit/
 │   └── excel-split.properties   – masterDir, outputDir
 └── insertgen/

@@ -29,7 +29,7 @@ public class MainFrame extends JFrame {
         SubselectMappingStore subselectStore  = new SubselectMappingStore();
         QueryPresetStore      presetStore     = new QueryPresetStore();
         SettingsPanel         settingsPanel   = new SettingsPanel();
-        GeneratorPanel        generatorPanel  = new GeneratorPanel(settingsPanel, virtualFkStore, ruleStore, seqStore, constTableStore, presetStore, subselectStore);
+        GeneratorPanel        generatorPanel  = new GeneratorPanel(settingsPanel, virtualFkStore, ruleStore, seqStore, constTableStore, presetStore, subselectStore, null);
         VirtualFkPanel        virtualFkPanel  = new VirtualFkPanel(virtualFkStore);
         SequenceMappingPanel  seqPanel        = new SequenceMappingPanel(seqStore);
         ConstantTablePanel    constPanel      = new ConstantTablePanel(constTableStore);

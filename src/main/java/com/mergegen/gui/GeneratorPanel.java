@@ -6,6 +6,7 @@ import com.mergegen.config.ConstantTableStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.SubselectMappingStore;
+import com.mergegen.config.GlobalTraversalRuleStore;
 import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.VirtualFkStore;
 import com.mergegen.model.QueryPreset;
@@ -88,6 +89,7 @@ public class GeneratorPanel extends JPanel {
     private final ConstantTableStore constTableStore;
     private final QueryPresetStore presetStore;
     private final SubselectMappingStore subselectStore;
+    private final GlobalTraversalRuleStore globalRuleStore;
 
     // Preset-Steuerung (CARD_INPUT)
     private final JComboBox<String> presetCombo     = new JComboBox<>();
@@ -102,7 +104,8 @@ public class GeneratorPanel extends JPanel {
                           TraversalRuleStore ruleStore,
                           SequenceMappingStore seqStore, ConstantTableStore constTableStore,
                           QueryPresetStore presetStore,
-                          SubselectMappingStore subselectStore) {
+                          SubselectMappingStore subselectStore,
+                          GlobalTraversalRuleStore globalRuleStore) {
         this.settingsPanel   = settingsPanel;
         this.virtualFkStore  = virtualFkStore;
         this.ruleStore       = ruleStore;
@@ -110,6 +113,7 @@ public class GeneratorPanel extends JPanel {
         this.constTableStore = constTableStore;
         this.presetStore     = presetStore;
         this.subselectStore  = subselectStore;
+        this.globalRuleStore = globalRuleStore;
         setLayout(new BorderLayout());
         // Alle drei Karten registrieren; sichtbar ist anfangs nur CARD_INPUT
         cardPane.add(buildInputCard(),  CARD_INPUT);
@@ -282,7 +286,30 @@ public class GeneratorPanel extends JPanel {
         // denn Presets bringen eigene Regeln mit (beim Auswählen geladen)
         String activePreset = (String) presetCombo.getSelectedItem();
         if (activePreset == null || activePreset.equals("(kein Preset)")) {
-            ruleStore.clear();
+            String rootTable = table;
+            if (globalRuleStore != null && globalRuleStore.hasRulesFor(rootTable)) {
+                int choice = JOptionPane.showOptionDialog(
+                    this,
+                    "Für " + rootTable + " existieren bereits gespeicherte Traversal-Regeln.\n"
+                        + "Sollen diese übernommen werden?",
+                    "Traversal-Regeln",
+                    JOptionPane.YES_NO_CANCEL_OPTION,
+                    JOptionPane.QUESTION_MESSAGE,
+                    null,
+                    new String[]{"Übernehmen", "Neu eingeben", "Abbrechen"},
+                    "Übernehmen");
+
+                if (choice == 2 || choice == JOptionPane.CLOSED_OPTION) {
+                    return;  // Abbruch
+                }
+                if (choice == 0) {
+                    ruleStore.loadFrom(globalRuleStore.getRulesFor(rootTable));
+                } else {
+                    ruleStore.clear();
+                }
+            } else {
+                ruleStore.clear();
+            }
         }
 
         setInputStatus("Analysiere...");
@@ -331,6 +358,14 @@ public class GeneratorPanel extends JPanel {
                     appSettings.setLastColumn(column);
                     appSettings.setLastValues(values);
                     showTreeCard(lastResult);
+
+                    // Traversal-Regeln global speichern
+                    if (globalRuleStore != null) {
+                        Map<String, TraversalRuleStore.TraversalRule> currentRules = ruleStore.getAll();
+                        if (!currentRules.isEmpty()) {
+                            globalRuleStore.saveRulesFor(table, currentRules);
+                        }
+                    }
                 } catch (Exception ex) {
                     if (isCausedBy(ex, TraversalService.TraversalCancelledException.class)) {
                         setInputStatus("Analyse abgebrochen.");
@@ -654,10 +689,12 @@ public class GeneratorPanel extends JPanel {
                     // Vierstufige Vorschlags-Logik
                     String suggestion = "";
 
-                    // 1. Im Store gespeichert?
+                    // 1. Im Store gespeichert? -> direkt übernehmen, kein Dialog
                     Optional<SequenceMapping> stored = seqStore.findByTable(tbl);
-                    if (stored.isPresent() && stored.get().getPkColumn().equalsIgnoreCase(pkCol)) {
-                        suggestion = stored.get().getSequenceName();
+                    if (stored.isPresent() && stored.get().getPkColumn().equalsIgnoreCase(pkCol)
+                            && !stored.get().getSequenceName().isEmpty()) {
+                        sequenceMap.put(key, stored.get().getSequenceName());
+                        continue;
                     }
 
                     // 2. STB_TABDEF nachschlagen

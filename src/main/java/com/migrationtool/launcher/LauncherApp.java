@@ -5,6 +5,7 @@ import com.excelsplit.ExcelSplitService;
 import com.excelsplit.MainPresenter;
 import com.excelsplit.MainWindow;
 import com.mergegen.config.ConstantTableStore;
+import com.mergegen.config.GlobalTraversalRuleStore;
 import com.mergegen.config.QueryPresetStore;
 import com.mergegen.config.SequenceMappingStore;
 import com.mergegen.config.SubselectMappingStore;
@@ -51,12 +52,13 @@ public class LauncherApp {
         SequenceMappingStore seqStore       = new SequenceMappingStore();
         QueryPresetStore     presetStore    = new QueryPresetStore();
 
-        // ── MergeGen-Stores (Konstantentabellen + Subselect) ────────────────
-        ConstantTableStore     constTableStore = new ConstantTableStore();
-        SubselectMappingStore  subselectStore  = new SubselectMappingStore();
+        // ── MergeGen-Stores (Konstantentabellen + Subselect + globale Regeln)
+        ConstantTableStore      constTableStore = new ConstantTableStore();
+        SubselectMappingStore   subselectStore  = new SubselectMappingStore();
+        GlobalTraversalRuleStore globalRuleStore = new GlobalTraversalRuleStore();
 
         // ── MergeGen-Panels ───────────────────────────────────────────────────
-        GeneratorPanel       generatorPanel = new GeneratorPanel(settingsPanel, virtualFkStore, ruleStore, seqStore, constTableStore, presetStore, subselectStore);
+        GeneratorPanel       generatorPanel = new GeneratorPanel(settingsPanel, virtualFkStore, ruleStore, seqStore, constTableStore, presetStore, subselectStore, globalRuleStore);
         VirtualFkPanel       vfkPanel       = new VirtualFkPanel(virtualFkStore);
         SequenceMappingPanel seqPanel       = new SequenceMappingPanel(seqStore);
         ConstantTablePanel   constPanel     = new ConstantTablePanel(constTableStore);
