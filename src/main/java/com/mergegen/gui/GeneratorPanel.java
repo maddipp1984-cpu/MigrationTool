@@ -325,6 +325,16 @@ public class GeneratorPanel extends JPanel {
                 var config = settingsPanel.getCurrentConfig();
                 try (DatabaseConnection conn = new DatabaseConnection(config)) {
                     SchemaAnalyzer   analyzer = new SchemaAnalyzer(conn.get(), config);
+
+                    // Sequence-Mappings aus STB_TABDEF aktualisieren
+                    publish("Lade Sequence-Mappings aus STB_TABDEF...");
+                    Map<String, String> tabdefMappings = analyzer.loadAllSequencesFromTabdef();
+                    for (Map.Entry<String, String> entry : tabdefMappings.entrySet()) {
+                        String[] parts = entry.getKey().split("\\.", 2);
+                        seqStore.remove(parts[0], parts[1]);
+                        seqStore.add(new SequenceMapping(parts[0], parts[1], entry.getValue()));
+                    }
+
                     TraversalService service  = new TraversalService(analyzer, virtualFkStore, ruleStore);
                     service.setLogger(this::publish);
                     service.setDecider(GeneratorPanel.this::askTraversalDecisionEnum);

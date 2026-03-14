@@ -8,7 +8,9 @@ import com.mergegen.model.TableRow;
 import java.sql.*;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.function.Consumer;
 import java.util.regex.Matcher;
@@ -367,6 +369,40 @@ public class SchemaAnalyzer {
             triggerLog.accept("Kein BEFORE INSERT Trigger auf " + tableName);
         }
         return Optional.empty();
+    }
+
+    /**
+     * Liest alle Tabellen mit Sequence-Zuordnung aus STB_TABDEF und ermittelt
+     * den PK pro Tabelle. Gibt eine Map von TABLE.PK_COL -> SEQ_NAME zurueck.
+     */
+    public Map<String, String> loadAllSequencesFromTabdef() {
+        Map<String, String> result = new LinkedHashMap<>();
+        String sql = "SELECT TAB_NAME, SEQ_NAME FROM " + schema + ".STB_TABDEF "
+            + "WHERE SEQ_NAME IS NOT NULL AND TAB_NAME IS NOT NULL";
+
+        try (PreparedStatement ps = connection.prepareStatement(sql);
+             ResultSet rs = ps.executeQuery()) {
+            while (rs.next()) {
+                String tabName = rs.getString("TAB_NAME");
+                String seqName = rs.getString("SEQ_NAME");
+                if (tabName == null || seqName == null) continue;
+                tabName = tabName.trim().toUpperCase();
+                seqName = seqName.trim().toUpperCase();
+                if (tabName.isEmpty() || seqName.isEmpty()) continue;
+
+                try {
+                    List<String> pkCols = getPrimaryKeyColumns(tabName);
+                    if (pkCols.size() == 1) {
+                        result.put(tabName + "." + pkCols.get(0), seqName);
+                    }
+                } catch (SQLException ignored) {
+                    // Tabelle nicht erreichbar – ueberspringen
+                }
+            }
+        } catch (SQLException ex) {
+            // STB_TABDEF existiert nicht oder Zugriff nicht moeglich
+        }
+        return result;
     }
 
     /**
