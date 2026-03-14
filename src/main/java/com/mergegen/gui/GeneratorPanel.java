@@ -73,6 +73,7 @@ public class GeneratorPanel extends JPanel {
     private final JTextArea resultArea = new JTextArea(6, 50);
     private final JButton   newBtn     = new JButton("Neue Abfrage");
     private final JButton   diffBtn    = new JButton("Mit letzter Version vergleichen");
+    private final JButton   diagramBtn = new JButton("Diagramm anzeigen");
     private org.fife.ui.rsyntaxtextarea.RSyntaxTextArea sqlPreviewArea;
     private String lastGeneratedFile;
     private String lastPreviousFile;
@@ -421,7 +422,7 @@ public class GeneratorPanel extends JPanel {
         splitPane.setResizeWeight(1.0);
         p.add(splitPane, BorderLayout.CENTER);
 
-        JButton diagramBtn = new JButton("Diagramm anzeigen");
+        diagramBtn.setEnabled(false);
 
         JPanel buttons = new JPanel(new FlowLayout(FlowLayout.LEFT));
         buttons.add(backBtn);
@@ -504,6 +505,7 @@ public class GeneratorPanel extends JPanel {
         DefaultMutableTreeNode root = buildTreeNodes(result.getRootNode());
         depTree.setModel(new DefaultTreeModel(root));
         expandAllNodes();
+        diagramBtn.setEnabled(true);
 
         int total = result.getTotalRows();
         Map<String, Integer> counts = result.getTableCounts();

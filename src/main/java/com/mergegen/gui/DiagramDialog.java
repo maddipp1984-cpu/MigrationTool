@@ -66,6 +66,7 @@ public class DiagramDialog extends JDialog {
             collectTables(rootNode, allTables);
 
             // Alle Spalten pro Tabelle aus den traversierten Rows sammeln
+            // (erste Row reicht – alle Rows einer Tabelle haben identische Spaltenstruktur)
             Map<String, Map<String, ColumnInfo>> tableColumns = new LinkedHashMap<>();
             for (TableRow row : result.getOrderedRows()) {
                 String tbl = row.getTableName().toUpperCase();
@@ -112,7 +113,7 @@ public class DiagramDialog extends JDialog {
                 for (String line : label.split("\n")) {
                     maxLen = Math.max(maxLen, line.length());
                 }
-                int width = Math.max(180, maxLen * 7 + 20);
+                int width = Math.max(180, maxLen * 8 + 20);
 
                 Object v = graph.insertVertex(parent, null, label,
                     0, 0, width, 0, style);
@@ -183,7 +184,7 @@ public class DiagramDialog extends JDialog {
         graphComponent.getViewport().setBackground(Color.WHITE);
         graphComponent.setWheelScrollingEnabled(false);
         graphComponent.setAutoScroll(false);
-        graphComponent.setPanning(true);
+        graphComponent.setPanning(false);  // eigenes Panning statt Shift+Drag
 
         // Panning mit linker Maustaste (ohne Shift)
         final int[] dragStart = new int[2];
@@ -210,7 +211,7 @@ public class DiagramDialog extends JDialog {
         graphComponent.getGraphControl().addMouseMotionListener(new java.awt.event.MouseMotionAdapter() {
             @Override
             public void mouseDragged(java.awt.event.MouseEvent e) {
-                if (dragging[0]) {
+                if (dragging[0] && graphComponent.getGraphControl().getParent() instanceof JViewport) {
                     JViewport vp = (JViewport) graphComponent.getGraphControl().getParent();
                     Point vpp = vp.getViewPosition();
                     vpp.translate(dragStart[0] - e.getX(), dragStart[1] - e.getY());
@@ -231,20 +232,24 @@ public class DiagramDialog extends JDialog {
             }
         });
 
-        // Legende
-        JPanel legendPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
-        legendPanel.add(createLegendItem(COLOR_ROOT, "Root-Tabelle"));
-        legendPanel.add(createLegendItem(COLOR_TABLE, "Tabelle"));
-        legendPanel.add(createLegendItem(COLOR_CONSTANT, "Konstantentabelle"));
-        legendPanel.add(new JLabel("  Linien:"));
-        legendPanel.add(createLineLegend(COLOR_TRAVERSE, "Traversiert"));
-        legendPanel.add(createLineLegend(COLOR_SKIP, "Skip"));
-        legendPanel.add(createLineLegend(COLOR_SUBSELECT, "Subselect"));
+        // Legende (links) + Schließen-Button (rechts)
+        JPanel legendItems = new JPanel(new FlowLayout(FlowLayout.LEFT, 15, 5));
+        legendItems.add(createLegendItem(COLOR_ROOT, "Root-Tabelle"));
+        legendItems.add(createLegendItem(COLOR_TABLE, "Tabelle"));
+        legendItems.add(createLegendItem(COLOR_CONSTANT, "Konstantentabelle"));
+        legendItems.add(new JLabel("  Linien:"));
+        legendItems.add(createLineLegend(COLOR_TRAVERSE, "Traversiert"));
+        legendItems.add(createLineLegend(COLOR_SKIP, "Skip"));
+        legendItems.add(createLineLegend(COLOR_SUBSELECT, "Subselect"));
 
         JButton closeBtn = new JButton("Schließen");
         closeBtn.addActionListener(e -> dispose());
-        legendPanel.add(Box.createHorizontalGlue());
-        legendPanel.add(closeBtn);
+        JPanel closeBtnPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        closeBtnPanel.add(closeBtn);
+
+        JPanel legendPanel = new JPanel(new BorderLayout());
+        legendPanel.add(legendItems, BorderLayout.WEST);
+        legendPanel.add(closeBtnPanel, BorderLayout.EAST);
 
         setLayout(new BorderLayout());
         add(graphComponent, BorderLayout.CENTER);
