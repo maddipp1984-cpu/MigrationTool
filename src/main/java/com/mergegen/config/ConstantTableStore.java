@@ -27,7 +27,7 @@ public class ConstantTableStore {
 
     /** Gibt ein Set aller Einträge zurück (uppercase) – effizient für contains-Prüfung. */
     public Set<String> getAsSet() {
-        return Collections.unmodifiableSet(new LinkedHashSet<>(entries));
+        return Collections.unmodifiableSet(entries);
     }
 
     /** Fügt eine Tabelle hinzu (falls nicht schon vorhanden) und speichert sofort. */

@@ -20,31 +20,22 @@ import java.util.stream.Collectors;
 public class MergeScriptGenerator {
 
     /**
-     * Erzeugt ein vollständiges MERGE-Statement für eine einzelne Tabellenzeile.
+     * Erzeugt ein vollstaendiges MERGE-Statement fuer eine einzelne Tabellenzeile.
      *
      * Die Werte in TableRow sind bereits als SQL-Literale gespeichert
      * (z.B. 42, 'Text', TO_DATE(...)) und werden direkt eingebettet.
      *
-     * @param sequenceMap Key: TABLE.PK_COL, Value: SEQUENCE_NAME.
-     *                    PK-Spalten mit Eintrag erhalten SEQ.NEXTVAL statt Quellwert.
-     * @param rootTable   Name der führenden Tabelle (zum Erkennen der Root-Zeile)
-     * @param nameColumn  Optionale Name-Spalte der Root-Tabelle; wenn gesetzt und Zeile
-     *                    gehört zur Root-Tabelle, wird ON über diese Spalte statt PK gebaut.
-     */
-    /**
-     * @param testSuffix  Wenn nicht leer: wird im Testmodus an den Wert der nameColumn
-     *                    der Root-Zeile angehängt (z.B. "_20260224143022"), damit der
-     *                    Datensatz stets als neu gilt und immer per INSERT angelegt wird.
-     *                    Nur wirksam wenn nameColumn gesetzt ist.
-     */
-    /**
-     * @param colVarSubstitutions Spaltenname → PL/SQL-Variablenname für DIESE Zeile.
-     *                            Priorität: colVarSubstitutions > sequenceMap > SQL-Literal.
-     *                            Null oder leer = kein PL/SQL-Pfad aktiv.
-     */
-    /**
-     * @param includeUpdate Wenn true, wird WHEN MATCHED THEN UPDATE SET für alle
-     *                      Nicht-PK-Spalten angehängt (Spalten mit Sequence/ColVar ausgenommen).
+     * @param sequenceMap         Key: TABLE.PK_COL, Value: SEQUENCE_NAME.
+     *                            PK-Spalten mit Eintrag erhalten SEQ.NEXTVAL statt Quellwert.
+     * @param rootTable           Name der fuehrenden Tabelle (zum Erkennen der Root-Zeile)
+     * @param nameColumn          Optionale Name-Spalte der Root-Tabelle; wenn gesetzt und Zeile
+     *                            gehoert zur Root-Tabelle, wird ON ueber diese Spalte statt PK gebaut.
+     * @param testSuffix          Wenn nicht leer: wird im Testmodus an den Wert der nameColumn
+     *                            der Root-Zeile angehaengt, damit der Datensatz stets als neu gilt.
+     * @param colVarSubstitutions Spaltenname -> PL/SQL-Variablenname fuer DIESE Zeile.
+     *                            Prioritaet: colVarSubstitutions > sequenceMap > SQL-Literal.
+     * @param includeUpdate       Wenn true, wird WHEN MATCHED THEN UPDATE SET fuer alle
+     *                            Nicht-PK-Spalten angehaengt (Spalten mit Sequence/ColVar ausgenommen).
      */
     public String generate(TableRow row, Map<String, String> sequenceMap,
                            String rootTable, String nameColumn, String testSuffix,

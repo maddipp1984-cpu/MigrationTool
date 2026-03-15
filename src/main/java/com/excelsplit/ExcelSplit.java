@@ -1,5 +1,7 @@
 package com.excelsplit;
 
+import com.mergegen.util.PathUtils;
+
 import javax.swing.*;
 import java.nio.file.*;
 
@@ -49,17 +51,6 @@ public class ExcelSplit {
             Path p = Paths.get(args[0]).toAbsolutePath().normalize();
             if (Files.isDirectory(p)) return p;
         }
-        try {
-            Path jar = Paths.get(
-                ExcelSplit.class.getProtectionDomain().getCodeSource().getLocation().toURI()
-            ).toAbsolutePath();
-            Path current = jar.getParent();
-            for (int i = 0; i < 6; i++) {
-                if (current == null) break;
-                if (Files.isDirectory(current.resolve("master"))) return current;
-                current = current.getParent();
-            }
-        } catch (Exception ignored) { }
-        return Paths.get(".").toAbsolutePath().normalize();
+        return PathUtils.detectBasePath(ExcelSplit.class);
     }
 }

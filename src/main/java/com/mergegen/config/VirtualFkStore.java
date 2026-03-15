@@ -2,9 +2,7 @@ package com.mergegen.config;
 
 import com.mergegen.model.ForeignKeyRelation;
 
-import java.io.*;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
 
 /**
@@ -15,23 +13,42 @@ import java.util.List;
  * Format: CHILD_TABLE|FK_COLUMN|PARENT_TABLE|PARENT_PK_COLUMN (eine Zeile pro Eintrag)
  * Zeilen, die mit '#' beginnen, werden als Kommentare ignoriert.
  *
- * Beim nächsten Traversal wird automatisch geprüft, ob ein virtueller FK inzwischen
- * als echter Constraint in der DB existiert – solche Einträge werden still entfernt.
+ * Beim naechsten Traversal wird automatisch geprueft, ob ein virtueller FK inzwischen
+ * als echter Constraint in der DB existiert – solche Eintraege werden still entfernt.
  */
-public class VirtualFkStore {
+public class VirtualFkStore extends AbstractPipeStore<ForeignKeyRelation> {
 
-    private static final String FILE_NAME  = "config/mergegen/virtual-fks.txt";
-    private static final String SEPARATOR  = "|";
-    private static final String COMMENT    = "#";
-
-    private final List<ForeignKeyRelation> entries = new ArrayList<>();
+    private static final String FILE_NAME = "config/mergegen/virtual-fks.txt";
 
     public VirtualFkStore() {
-        load();
+        super(FILE_NAME,
+            "Virtuelle FK-Definitionen",
+            "Format: CHILD_TABLE|FK_COLUMN|PARENT_TABLE|PARENT_PK_COLUMN");
     }
 
+    @Override
+    protected ForeignKeyRelation parseLine(String[] parts) {
+        return new ForeignKeyRelation(
+            parts[0].trim().toUpperCase(),
+            parts[1].trim().toUpperCase(),
+            parts[2].trim().toUpperCase(),
+            parts[3].trim().toUpperCase()
+        );
+    }
+
+    @Override
+    protected String formatEntry(ForeignKeyRelation rel) {
+        return rel.getChildTable() + "|" +
+               rel.getFkColumn()   + "|" +
+               rel.getParentTable() + "|" +
+               rel.getParentPkColumn();
+    }
+
+    @Override
+    protected int minFieldCount() { return 4; }
+
     /**
-     * Gibt alle virtuellen FKs zurück, bei denen parentTable der angegebenen
+     * Gibt alle virtuellen FKs zurueck, bei denen parentTable der angegebenen
      * Parent-Tabelle entspricht (case-insensitiv).
      */
     public List<ForeignKeyRelation> getRelationsForParent(String parentTable) {
@@ -45,7 +62,7 @@ public class VirtualFkStore {
     }
 
     /**
-     * Gibt alle virtuellen FKs zurück, bei denen die angegebene Tabelle
+     * Gibt alle virtuellen FKs zurueck, bei denen die angegebene Tabelle
      * die Child-Tabelle ist (ausgehende Referenzen).
      */
     public List<ForeignKeyRelation> getRelationsForChild(String childTable) {
@@ -58,12 +75,7 @@ public class VirtualFkStore {
         return result;
     }
 
-    /** Gibt eine unveränderliche Kopie aller Einträge zurück (für die GUI). */
-    public List<ForeignKeyRelation> getAll() {
-        return Collections.unmodifiableList(new ArrayList<>(entries));
-    }
-
-    /** Fügt einen neuen virtuellen FK hinzu und speichert sofort. */
+    /** Fuegt einen neuen virtuellen FK hinzu und speichert sofort. */
     public void add(ForeignKeyRelation rel) {
         entries.add(rel);
         save();
@@ -77,46 +89,5 @@ public class VirtualFkStore {
             e.getParentTable().equalsIgnoreCase(rel.getParentTable()) &&
             e.getParentPkColumn().equalsIgnoreCase(rel.getParentPkColumn()));
         save();
-    }
-
-    /** Lädt die Einträge aus virtual-fks.txt (fehlende Datei ist kein Fehler). */
-    private void load() {
-        File file = new File(FILE_NAME);
-        if (!file.exists()) return;
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith(COMMENT)) continue;
-                String[] parts = line.split("\\|", -1);
-                if (parts.length != 4) continue;
-                entries.add(new ForeignKeyRelation(
-                    parts[0].trim().toUpperCase(),
-                    parts[1].trim().toUpperCase(),
-                    parts[2].trim().toUpperCase(),
-                    parts[3].trim().toUpperCase()
-                ));
-            }
-        } catch (IOException ex) {
-            System.err.println("virtual-fks.txt konnte nicht geladen werden: " + ex.getMessage());
-        }
-    }
-
-    /** Schreibt alle Einträge in virtual-fks.txt. */
-    private void save() {
-        File file = new File(FILE_NAME);
-        file.getParentFile().mkdirs();
-        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
-            writer.println("# Virtuelle FK-Definitionen");
-            writer.println("# Format: CHILD_TABLE|FK_COLUMN|PARENT_TABLE|PARENT_PK_COLUMN");
-            for (ForeignKeyRelation rel : entries) {
-                writer.println(rel.getChildTable() + SEPARATOR +
-                               rel.getFkColumn()   + SEPARATOR +
-                               rel.getParentTable() + SEPARATOR +
-                               rel.getParentPkColumn());
-            }
-        } catch (IOException ex) {
-            System.err.println("virtual-fks.txt konnte nicht gespeichert werden: " + ex.getMessage());
-        }
     }
 }

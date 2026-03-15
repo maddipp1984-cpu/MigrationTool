@@ -11,6 +11,7 @@ import com.mergegen.config.TraversalRuleStore;
 import com.mergegen.config.VirtualFkStore;
 import com.mergegen.model.QueryPreset;
 import com.mergegen.db.DatabaseConnection;
+import com.mergegen.generator.ScriptWriteContext;
 import com.mergegen.generator.ScriptWriter;
 import com.mergegen.model.ColumnInfo;
 import com.mergegen.model.DependencyNode;
@@ -327,13 +328,16 @@ public class GeneratorPanel extends JPanel {
                 try (DatabaseConnection conn = new DatabaseConnection(config)) {
                     SchemaAnalyzer   analyzer = new SchemaAnalyzer(conn.get(), config);
 
-                    // Sequence-Mappings aus STB_TABDEF aktualisieren
+                    // Sequence-Mappings aus STB_TABDEF aktualisieren (batch)
                     publish("Lade Sequence-Mappings aus STB_TABDEF...");
                     Map<String, String> tabdefMappings = analyzer.loadAllSequencesFromTabdef();
-                    for (Map.Entry<String, String> entry : tabdefMappings.entrySet()) {
-                        String[] parts = entry.getKey().split("\\.", 2);
-                        seqStore.remove(parts[0], parts[1]);
-                        seqStore.add(new SequenceMapping(parts[0], parts[1], entry.getValue()));
+                    if (!tabdefMappings.isEmpty()) {
+                        for (Map.Entry<String, String> entry : tabdefMappings.entrySet()) {
+                            String[] parts = entry.getKey().split("\\.", 2);
+                            seqStore.removeWithoutSave(parts[0], parts[1]);
+                            seqStore.addWithoutSave(new SequenceMapping(parts[0], parts[1], entry.getValue()));
+                        }
+                        seqStore.save();
                     }
 
                     TraversalService service  = new TraversalService(analyzer, virtualFkStore, ruleStore);
@@ -638,203 +642,38 @@ public class GeneratorPanel extends JPanel {
                 .format(java.time.format.DateTimeFormatter.ofPattern("yyyyMMddHHmmss"))
             : "";
 
-        // Konstantentabellen aus globalem Store (kein MERGE, FK-Werte bleiben als Literale)
+        // Konstantentabellen filtern
         Set<String> excludedTables = constTableStore.getAsSet();
+        List<TableRow> filteredRows = filterConstantTables(lastResult.getOrderedRows(), excludedTables);
+        Map<String, Integer> filteredCounts = countByTable(filteredRows);
 
-        List<TableRow> filteredRows = new ArrayList<>();
-        for (TableRow row : lastResult.getOrderedRows()) {
-            if (!excludedTables.contains(row.getTableName().toUpperCase())) {
-                filteredRows.add(row);
-            }
-        }
-
-        Map<String, Integer> filteredCounts = new LinkedHashMap<>();
-        for (TableRow row : filteredRows) {
-            filteredCounts.merge(row.getTableName(), 1, Integer::sum);
-        }
-
-        // 3. Eindeutige Tabellen mit ihren PK-ColumnInfos sammeln (nur gefilterte)
-        Map<String, List<ColumnInfo>> tablePkMap = new LinkedHashMap<>();
-        for (TableRow row : filteredRows) {
-            String tbl = row.getTableName();
-            if (!tablePkMap.containsKey(tbl)) {
-                List<ColumnInfo> pkCols = row.getColumns().values().stream()
-                    .filter(ColumnInfo::isPrimaryKey)
-                    .collect(Collectors.toList());
-                tablePkMap.put(tbl, pkCols);
-            }
-        }
-
-        // Sequence-Dialog pro Tabelle/PK-Spalte
-        Map<String, String> sequenceMap = new LinkedHashMap<>();
-
-        // Trigger-Erkennung braucht DB-Verbindung – einmal öffnen
-        SchemaAnalyzer triggerAnalyzer = null;
-        DatabaseConnection triggerConn = null;
-        java.io.PrintWriter triggerLogWriter = null;
-        try {
-            var config = settingsPanel.getCurrentConfig();
-            triggerConn = new DatabaseConnection(config);
-            triggerAnalyzer = new SchemaAnalyzer(triggerConn.get(), config);
-            java.nio.file.Path logPath = java.nio.file.Paths.get("config", "mergegen", "traversal.log");
-            java.nio.file.Files.createDirectories(logPath.getParent());
-            triggerLogWriter = new java.io.PrintWriter(
-                java.nio.file.Files.newBufferedWriter(logPath,
-                    java.nio.file.StandardOpenOption.CREATE,
-                    java.nio.file.StandardOpenOption.APPEND));
-            final java.io.PrintWriter logW = triggerLogWriter;
-            triggerAnalyzer.setTriggerLog(msg -> {
-                logW.println(msg);
-                logW.flush();
-            });
-        } catch (Exception ex) {
-            // Trigger-Erkennung nicht möglich – kein Abbruch, nur kein Vorschlag
-        }
-
-        try {
-            for (Map.Entry<String, List<ColumnInfo>> entry : tablePkMap.entrySet()) {
-                String tbl = entry.getKey();
-                List<ColumnInfo> pkCols = entry.getValue();
-
-                for (ColumnInfo pkColInfo : pkCols) {
-                    String pkCol = pkColInfo.getName();
-
-                    // FK-Spalte → Wert kommt vom Parent, nie eine Sequence
-                    boolean isFkColumn = lastResult.getFkRelations().values().stream()
-                        .flatMap(List::stream)
-                        .anyMatch(fk -> fk.getChildTable().equalsIgnoreCase(tbl)
-                                     && fk.getFkColumn().equalsIgnoreCase(pkCol));
-                    if (isFkColumn) continue;
-
-                    // Datum/Timestamp → kein Sequence-Kandidat
-                    String dataType = pkColInfo.getDataType().toUpperCase();
-                    if (dataType.equals("DATE") || dataType.startsWith("TIMESTAMP")) continue;
-
-                    String key = tbl + "." + pkCol;
-
-                    // Vierstufige Vorschlags-Logik
-                    String suggestion = "";
-
-                    // 1. Im Store gespeichert? -> direkt übernehmen, kein Dialog
-                    Optional<SequenceMapping> stored = seqStore.findByTable(tbl);
-                    if (stored.isPresent() && stored.get().getPkColumn().equalsIgnoreCase(pkCol)
-                            && !stored.get().getSequenceName().isEmpty()) {
-                        sequenceMap.put(key, stored.get().getSequenceName());
-                        continue;
-                    }
-
-                    // 2. STB_TABDEF nachschlagen
-                    if (suggestion.isEmpty() && triggerAnalyzer != null) {
-                        Optional<String> tabdefSeq = triggerAnalyzer.lookupSequenceFromTabdef(tbl);
-                        if (tabdefSeq.isPresent()) {
-                            suggestion = tabdefSeq.get();
-                        }
-                    }
-
-                    // 3. Trigger pruefen
-                    if (suggestion.isEmpty() && triggerAnalyzer != null) {
-                        Optional<String> triggerSeq = triggerAnalyzer.detectTriggerSequence(tbl);
-                        if (triggerSeq.isPresent()) {
-                            suggestion = triggerSeq.get();
-                        }
-                    }
-
-                    // 4. Dialog anzeigen
-                    String input = (String) JOptionPane.showInputDialog(
-                        this,
-                        "Tabelle " + tbl + ", PK-Spalte " + pkCol +
-                        "\n(leer = PK-Wert aus Quelle übernehmen)",
-                        "Sequence-Name",
-                        JOptionPane.QUESTION_MESSAGE,
-                        null, null,
-                        suggestion);
-
-                    // Abbruch → gesamte Generierung abbrechen
-                    if (input == null) return;
-
-                    input = input.trim().toUpperCase();
-                    if (!input.isEmpty()) {
-                        sequenceMap.put(key, input);
-                        // Im Store speichern/aktualisieren
-                        seqStore.remove(tbl, pkCol);
-                        seqStore.add(new SequenceMapping(tbl, pkCol, input));
-                    }
-                }
-            }
-        } finally {
-            if (triggerConn != null) {
-                try { triggerConn.close(); } catch (Exception ignored) {}
-            }
-            if (triggerLogWriter != null) {
-                triggerLogWriter.close();
-            }
-        }
+        // Sequence-Mappings sammeln (Dialoge auf EDT)
+        Map<String, String> sequenceMap = collectSequenceMappings(filteredRows);
+        if (sequenceMap == null) return; // Benutzer hat abgebrochen
 
         generateBtn.setEnabled(false);
         backBtn.setEnabled(false);
 
-        Map<String, String> finalSeqMap = sequenceMap;
-        String finalNameColumn = nameColumn;
-        String finalTestSuffix = testSuffix;
         boolean finalIncludeUpdate = updateCheck.isSelected();
 
-        // Per-Object-Daten vorbereiten (Filterung pro Objekt)
-        final List<List<TableRow>> perObjectRows = new ArrayList<>();
-        final List<Map<String, Integer>> perObjectCounts = new ArrayList<>();
+        // Per-Object-Daten vorbereiten
+        List<List<TableRow>> perObjectRows = new ArrayList<>();
+        List<Map<String, Integer>> perObjectCounts = new ArrayList<>();
+        preparePerObjectData(excludedTables, perObjectRows, perObjectCounts);
 
-        if (lastResultsPerObject != null && lastResultsPerObject.size() > 1) {
-            for (TraversalResult objResult : lastResultsPerObject) {
-                List<TableRow> objFiltered = new ArrayList<>();
-                for (TableRow row : objResult.getOrderedRows()) {
-                    if (!excludedTables.contains(row.getTableName().toUpperCase())) {
-                        objFiltered.add(row);
-                    }
-                }
-                Map<String, Integer> objCounts = new LinkedHashMap<>();
-                for (TableRow row : objFiltered) {
-                    objCounts.merge(row.getTableName(), 1, Integer::sum);
-                }
-                perObjectRows.add(objFiltered);
-                perObjectCounts.add(objCounts);
-            }
-        }
-
-        List<TableRow> finalFilteredRows = filteredRows;
-        Map<String, Integer> finalFilteredCounts = filteredCounts;
+        ScriptWriteContext ctx = new ScriptWriteContext(
+            lastTable, lastIds, settingsPanel.getOutputDir(), sequenceMap,
+            nameColumn, testSuffix, lastResult.getFkRelations(), finalIncludeUpdate,
+            subselectStore, lastResult.getSubselectRows(), aliasField.getText().trim());
 
         SwingWorker<String, Void> worker = new SwingWorker<>() {
             @Override
             protected String doInBackground() throws Exception {
                 ScriptWriter writer = new ScriptWriter();
-                String fileAlias = aliasField.getText().trim();
                 if (perObjectRows.size() > 1) {
-                    return writer.writePerObject(
-                        perObjectRows,
-                        perObjectCounts,
-                        lastTable, lastIds,
-                        settingsPanel.getOutputDir(),
-                        finalSeqMap,
-                        finalNameColumn,
-                        finalTestSuffix,
-                        lastResult.getFkRelations(),
-                        finalIncludeUpdate,
-                        subselectStore,
-                        lastResult.getSubselectRows(),
-                        fileAlias);
+                    return writer.writePerObject(perObjectRows, perObjectCounts, ctx);
                 } else {
-                    return writer.write(
-                        finalFilteredRows,
-                        finalFilteredCounts,
-                        lastTable, lastIds,
-                        settingsPanel.getOutputDir(),
-                        finalSeqMap,
-                        finalNameColumn,
-                        finalTestSuffix,
-                        lastResult.getFkRelations(),
-                        finalIncludeUpdate,
-                        subselectStore,
-                        lastResult.getSubselectRows(),
-                        fileAlias);
+                    return writer.write(filteredRows, filteredCounts, ctx);
                 }
             }
 
@@ -844,7 +683,7 @@ public class GeneratorPanel extends JPanel {
                 backBtn.setEnabled(true);
                 try {
                     String filename = get();
-                    int total = finalFilteredRows.size();
+                    int total = filteredRows.size();
                     String objInfo = perObjectRows.size() > 1
                         ? "Objekte:      " + perObjectRows.size() + "\n" : "";
                     resultArea.setText(
@@ -852,9 +691,9 @@ public class GeneratorPanel extends JPanel {
                         "Datei:        " + filename + "\n" +
                         objInfo +
                         "Statements:   " + total + "\n" +
-                        "Tabellen:     " + finalFilteredCounts.size() + "\n\n" +
+                        "Tabellen:     " + filteredCounts.size() + "\n\n" +
                         "Tabellenübersicht:\n" +
-                        buildSummary(finalFilteredCounts)
+                        buildSummary(filteredCounts)
                     );
 
                     // SQL-Vorschau laden
@@ -882,6 +721,138 @@ public class GeneratorPanel extends JPanel {
             }
         };
         worker.execute();
+    }
+
+    /** Filtert Zeilen von Konstantentabellen heraus. */
+    private List<TableRow> filterConstantTables(List<TableRow> rows, Set<String> excludedTables) {
+        List<TableRow> filtered = new ArrayList<>();
+        for (TableRow row : rows) {
+            if (!excludedTables.contains(row.getTableName().toUpperCase())) {
+                filtered.add(row);
+            }
+        }
+        return filtered;
+    }
+
+    /** Zaehlt Zeilen pro Tabelle. */
+    private Map<String, Integer> countByTable(List<TableRow> rows) {
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        for (TableRow row : rows) {
+            counts.merge(row.getTableName(), 1, Integer::sum);
+        }
+        return counts;
+    }
+
+    /**
+     * Sammelt Sequence-Mappings fuer alle PK-Spalten.
+     * Zeigt bei Bedarf Dialoge an. Gibt null zurueck wenn der Benutzer abbricht.
+     */
+    private Map<String, String> collectSequenceMappings(List<TableRow> filteredRows) {
+        // Eindeutige Tabellen mit ihren PK-ColumnInfos sammeln
+        Map<String, List<ColumnInfo>> tablePkMap = new LinkedHashMap<>();
+        for (TableRow row : filteredRows) {
+            String tbl = row.getTableName();
+            if (!tablePkMap.containsKey(tbl)) {
+                tablePkMap.put(tbl, row.getColumns().values().stream()
+                    .filter(ColumnInfo::isPrimaryKey)
+                    .collect(Collectors.toList()));
+            }
+        }
+
+        Map<String, String> sequenceMap = new LinkedHashMap<>();
+
+        // Trigger-Erkennung braucht DB-Verbindung
+        SchemaAnalyzer triggerAnalyzer = null;
+        DatabaseConnection triggerConn = null;
+        java.io.PrintWriter triggerLogWriter = null;
+        try {
+            var config = settingsPanel.getCurrentConfig();
+            triggerConn = new DatabaseConnection(config);
+            triggerAnalyzer = new SchemaAnalyzer(triggerConn.get(), config);
+            java.nio.file.Path logPath = java.nio.file.Paths.get("config", "mergegen", "traversal.log");
+            java.nio.file.Files.createDirectories(logPath.getParent());
+            triggerLogWriter = new java.io.PrintWriter(
+                java.nio.file.Files.newBufferedWriter(logPath,
+                    java.nio.file.StandardOpenOption.CREATE,
+                    java.nio.file.StandardOpenOption.APPEND));
+            final java.io.PrintWriter logW = triggerLogWriter;
+            triggerAnalyzer.setTriggerLog(msg -> { logW.println(msg); logW.flush(); });
+        } catch (Exception ex) {
+            // Trigger-Erkennung nicht moeglich – kein Abbruch
+        }
+
+        try {
+            for (Map.Entry<String, List<ColumnInfo>> entry : tablePkMap.entrySet()) {
+                String tbl = entry.getKey();
+                for (ColumnInfo pkColInfo : entry.getValue()) {
+                    String pkCol = pkColInfo.getName();
+
+                    // FK-Spalte -> kein Sequence-Kandidat
+                    boolean isFkColumn = lastResult.getFkRelations().values().stream()
+                        .flatMap(List::stream)
+                        .anyMatch(fk -> fk.getChildTable().equalsIgnoreCase(tbl)
+                                     && fk.getFkColumn().equalsIgnoreCase(pkCol));
+                    if (isFkColumn) continue;
+
+                    // Datum/Timestamp -> kein Sequence-Kandidat
+                    String dataType = pkColInfo.getDataType().toUpperCase();
+                    if (dataType.equals("DATE") || dataType.startsWith("TIMESTAMP")) continue;
+
+                    String key = tbl + "." + pkCol;
+
+                    // 1. Im Store gespeichert? -> direkt uebernehmen
+                    Optional<SequenceMapping> stored = seqStore.findByTable(tbl);
+                    if (stored.isPresent() && stored.get().getPkColumn().equalsIgnoreCase(pkCol)
+                            && !stored.get().getSequenceName().isEmpty()) {
+                        sequenceMap.put(key, stored.get().getSequenceName());
+                        continue;
+                    }
+
+                    // 2+3. STB_TABDEF / Trigger pruefen
+                    String suggestion = "";
+                    if (triggerAnalyzer != null) {
+                        Optional<String> tabdefSeq = triggerAnalyzer.lookupSequenceFromTabdef(tbl);
+                        if (tabdefSeq.isPresent()) suggestion = tabdefSeq.get();
+                        if (suggestion.isEmpty()) {
+                            Optional<String> triggerSeq = triggerAnalyzer.detectTriggerSequence(tbl);
+                            if (triggerSeq.isPresent()) suggestion = triggerSeq.get();
+                        }
+                    }
+
+                    // 4. Dialog anzeigen
+                    String input = (String) JOptionPane.showInputDialog(this,
+                        "Tabelle " + tbl + ", PK-Spalte " + pkCol +
+                        "\n(leer = PK-Wert aus Quelle übernehmen)",
+                        "Sequence-Name", JOptionPane.QUESTION_MESSAGE,
+                        null, null, suggestion);
+
+                    if (input == null) return null; // Abbruch
+
+                    input = input.trim().toUpperCase();
+                    if (!input.isEmpty()) {
+                        sequenceMap.put(key, input);
+                        seqStore.remove(tbl, pkCol);
+                        seqStore.add(new SequenceMapping(tbl, pkCol, input));
+                    }
+                }
+            }
+        } finally {
+            if (triggerConn != null) { try { triggerConn.close(); } catch (Exception ignored) {} }
+            if (triggerLogWriter != null) triggerLogWriter.close();
+        }
+        return sequenceMap;
+    }
+
+    /** Bereitet die Per-Object-Daten fuer Multi-Objekt-Generierung vor. */
+    private void preparePerObjectData(Set<String> excludedTables,
+                                       List<List<TableRow>> perObjectRows,
+                                       List<Map<String, Integer>> perObjectCounts) {
+        if (lastResultsPerObject == null || lastResultsPerObject.size() <= 1) return;
+        for (TraversalResult objResult : lastResultsPerObject) {
+            List<TableRow> objFiltered = filterConstantTables(objResult.getOrderedRows(), excludedTables);
+            perObjectRows.add(objFiltered);
+            perObjectCounts.add(countByTable(objFiltered));
+        }
     }
 
     // ── Hilfsmethoden ─────────────────────────────────────────────────────────

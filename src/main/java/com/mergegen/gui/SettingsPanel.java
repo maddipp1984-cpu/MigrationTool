@@ -22,6 +22,8 @@ import java.util.Properties;
  */
 public class SettingsPanel extends JPanel {
 
+    private static final Color COLOR_SUCCESS = new Color(0, 130, 0);
+
     private final ConnectionProfileManager profileManager = new ConnectionProfileManager();
     private final AppSettings              appSettings    = new AppSettings();
 
@@ -118,7 +120,7 @@ public class SettingsPanel extends JPanel {
             userField.setText(props.getProperty("db.user", ""));
             passwordField.setText(props.getProperty("db.password", ""));
             schemaField.setText(props.getProperty("db.schema", ""));
-            setStatus("Profil geladen: " + selected, new Color(0, 130, 0));
+            setStatus("Profil geladen: " + selected, COLOR_SUCCESS);
         } catch (Exception ex) {
             setStatus("Fehler beim Laden: " + ex.getMessage(), Color.RED);
         }
@@ -134,7 +136,7 @@ public class SettingsPanel extends JPanel {
         if (confirm != JOptionPane.YES_OPTION) return;
 
         if (profileManager.delete(selected)) {
-            setStatus("Profil gelöscht: " + selected, new Color(0, 130, 0));
+            setStatus("Profil gelöscht: " + selected, COLOR_SUCCESS);
             refreshProfileList();
             clearForm();
         } else {
@@ -231,7 +233,7 @@ public class SettingsPanel extends JPanel {
             outputDirField.setText(selected.getAbsolutePath());
             // Sofort persistieren – kein separater Speichern-Button nötig
             appSettings.setOutputDir(selected.getAbsolutePath());
-            setStatus("Ausgabeverzeichnis gesetzt: " + selected.getAbsolutePath(), new Color(0, 130, 0));
+            setStatus("Ausgabeverzeichnis gesetzt: " + selected.getAbsolutePath(), COLOR_SUCCESS);
         }
     }
 
@@ -276,7 +278,7 @@ public class SettingsPanel extends JPanel {
             profileManager.save(name, props);
             refreshProfileList();
             profileCombo.setSelectedItem(name);
-            setStatus("Profil gespeichert: " + name, new Color(0, 130, 0));
+            setStatus("Profil gespeichert: " + name, COLOR_SUCCESS);
         } catch (Exception ex) {
             setStatus("Fehler beim Speichern: " + ex.getMessage(), Color.RED);
         }
@@ -301,7 +303,7 @@ public class SettingsPanel extends JPanel {
             protected void done() {
                 try {
                     String result = get();
-                    if ("OK".equals(result)) setStatus("Verbindung erfolgreich.", new Color(0, 130, 0));
+                    if ("OK".equals(result)) setStatus("Verbindung erfolgreich.", COLOR_SUCCESS);
                     else                     setStatus(result, Color.RED);
                 } catch (Exception ex) {
                     setStatus("FEHLER: " + ex.getMessage(), Color.RED);

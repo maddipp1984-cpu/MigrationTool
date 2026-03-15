@@ -25,6 +25,25 @@ public class ScriptWriter {
 
     private final MergeScriptGenerator mergeGenerator = new MergeScriptGenerator();
 
+    /** Convenience-Methode mit ScriptWriteContext. */
+    public String write(List<TableRow> orderedRows, Map<String, Integer> tableCounts,
+                        ScriptWriteContext ctx) throws IOException {
+        return write(orderedRows, tableCounts, ctx.getRootTable(), ctx.getRootIds(),
+                     ctx.getOutputDir(), ctx.getSequenceMap(), ctx.getNameColumn(),
+                     ctx.getTestSuffix(), ctx.getFkRelations(), ctx.isIncludeUpdate(),
+                     ctx.getSubselectStore(), ctx.getSubselectRows(), ctx.getAlias());
+    }
+
+    /** Convenience-Methode mit ScriptWriteContext. */
+    public String writePerObject(List<List<TableRow>> rowsPerObject,
+                                  List<Map<String, Integer>> countsPerObject,
+                                  ScriptWriteContext ctx) throws IOException {
+        return writePerObject(rowsPerObject, countsPerObject, ctx.getRootTable(), ctx.getRootIds(),
+                              ctx.getOutputDir(), ctx.getSequenceMap(), ctx.getNameColumn(),
+                              ctx.getTestSuffix(), ctx.getFkRelations(), ctx.isIncludeUpdate(),
+                              ctx.getSubselectStore(), ctx.getSubselectRows(), ctx.getAlias());
+    }
+
     /**
      * Schreibt alle MERGE-Statements in eine .sql-Datei.
      *
@@ -53,11 +72,10 @@ public class ScriptWriter {
                         Map<String, TableRow> subselectRows,
                         String alias) throws IOException {
 
-        SubselectMappingStore ssStore = subselectStore;
         Map<String, TableRow> ssRows = subselectRows != null ? subselectRows : new HashMap<>();
 
-        File outputFile = prepareOutputFile(rootTable, outputDir, alias);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        File outputFile = prepareOutputFile(rootTable, outputDir, alias, timestamp);
 
         boolean hasChildren = orderedRows.stream()
             .anyMatch(r -> !r.getTableName().equalsIgnoreCase(rootTable));
@@ -70,7 +88,7 @@ public class ScriptWriter {
             if (usePlSql) {
                 writePlSqlBlock(writer, orderedRows, tableCounts, rootTable, nameColumn,
                         testSuffix, sequenceMap, fkRelations != null ? fkRelations : new HashMap<>(), includeUpdate,
-                        ssStore, ssRows);
+                        subselectStore, ssRows, needsSkipCheck);
             } else {
                 writePlainStatements(writer, orderedRows, tableCounts, rootTable, nameColumn, testSuffix, sequenceMap, includeUpdate);
             }
@@ -116,7 +134,8 @@ public class ScriptWriter {
                                  Map<String, List<ForeignKeyRelation>> fkRelations,
                                  boolean includeUpdate,
                                  SubselectMappingStore ssStore,
-                                 Map<String, TableRow> ssRows) throws IOException {
+                                 Map<String, TableRow> ssRows,
+                                 boolean needsSkipCheck) throws IOException {
 
         // ── Phase 1: varMap aufbauen ───────────────────────────────────────────
         // varMap:  "TABLE.PKCOL#altWert" → Variablenname
@@ -152,9 +171,6 @@ public class ScriptWriter {
         }
 
         // ── Phase 2: DECLARE-Block ─────────────────────────────────────────────
-        boolean hasChildren = orderedRows.stream()
-            .anyMatch(r -> !r.getTableName().equalsIgnoreCase(rootTable));
-        boolean needsSkipCheck = !includeUpdate && hasChildren;
 
         writer.write("DECLARE\n");
         if (needsSkipCheck) {
@@ -305,7 +321,7 @@ public class ScriptWriter {
      * @param alias  Optionaler Alias fuer den Dateinamen (null/leer = Tabellenname)
      * @return die Ziel-Datei (MERGE_<ALIAS>.sql oder MERGE_<TABLE>.sql)
      */
-    private File prepareOutputFile(String rootTable, String outputDir, String alias) {
+    private File prepareOutputFile(String rootTable, String outputDir, String alias, String timestamp) {
         String safeTable = rootTable.toUpperCase();
         if (!safeTable.matches("[A-Z_$#][A-Z0-9_$#]*")) {
             throw new IllegalArgumentException("Ungueltiger Tabellenname: " + rootTable);
@@ -315,7 +331,6 @@ public class ScriptWriter {
         String baseName = (alias != null && !alias.trim().isEmpty())
             ? alias.trim().replaceAll("[^A-Za-z0-9_\\-]", "_")
             : safeTable;
-        String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
         return new File(tableDir, "MERGE_" + baseName + "_" + timestamp + ".sql");
     }
 
@@ -365,11 +380,10 @@ public class ScriptWriter {
                                   Map<String, TableRow> subselectRows,
                                   String alias) throws IOException {
 
-        SubselectMappingStore ssStore = subselectStore;
         Map<String, TableRow> ssRows = subselectRows != null ? subselectRows : new HashMap<>();
 
-        File outputFile = prepareOutputFile(rootTable, outputDir, alias);
         String timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"));
+        File outputFile = prepareOutputFile(rootTable, outputDir, alias, timestamp);
 
         // Gesamt-Counts für Header
         Map<String, Integer> totalCounts = new LinkedHashMap<>();
@@ -403,7 +417,7 @@ public class ScriptWriter {
                 if (usePlSql) {
                     writePlSqlBlock(writer, rows, counts, rootTable, nameColumn,
                             testSuffix, sequenceMap, fkRelations != null ? fkRelations : new HashMap<>(), includeUpdate,
-                            ssStore, ssRows);
+                            subselectStore, ssRows, needsSkipCheck);
                 } else {
                     writePlainStatements(writer, rows, counts, rootTable, nameColumn, testSuffix, sequenceMap, includeUpdate);
                 }

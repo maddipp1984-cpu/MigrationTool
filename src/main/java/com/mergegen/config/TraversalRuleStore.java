@@ -1,6 +1,7 @@
 package com.mergegen.config;
 
 import java.util.*;
+import java.util.stream.Collectors;
 
 /**
  * Haelt Traversal-Regeln im Speicher (nicht persistent).
@@ -62,6 +63,43 @@ public class TraversalRuleStore {
     /** Leert alle Regeln. */
     public void clear() {
         rules.clear();
+    }
+
+    /** Parst Traversal-Regeln aus Format: PARENT>CHILD.FK=JA;...=NEIN;...=SUBSELECT */
+    public static Map<String, TraversalRule> parseRules(String s) {
+        Map<String, TraversalRule> rules = new LinkedHashMap<>();
+        for (String part : s.split(";", -1)) {
+            part = part.trim();
+            if (part.isEmpty()) continue;
+            int eq = part.lastIndexOf('=');
+            if (eq < 0) continue;
+            String key = part.substring(0, eq).trim();
+            String val = part.substring(eq + 1).trim().toUpperCase();
+            TraversalRule rule;
+            switch (val) {
+                case "JA":        rule = TraversalRule.TRAVERSE;  break;
+                case "SUBSELECT": rule = TraversalRule.SUBSELECT; break;
+                default:          rule = TraversalRule.SKIP;      break;
+            }
+            rules.put(key, rule);
+        }
+        return rules;
+    }
+
+    /** Formatiert Traversal-Regeln: PARENT>CHILD.FK=JA;...=NEIN;...=SUBSELECT */
+    public static String formatRules(Map<String, TraversalRule> rules) {
+        if (rules == null || rules.isEmpty()) return "";
+        return rules.entrySet().stream()
+            .map(e -> {
+                String val;
+                switch (e.getValue()) {
+                    case TRAVERSE:  val = "JA";        break;
+                    case SUBSELECT: val = "SUBSELECT"; break;
+                    default:        val = "NEIN";      break;
+                }
+                return e.getKey() + "=" + val;
+            })
+            .collect(Collectors.joining(";"));
     }
 
     private String buildKey(String parentTable, String childTable, String fkColumn) {

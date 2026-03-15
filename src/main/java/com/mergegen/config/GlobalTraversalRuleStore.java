@@ -5,7 +5,6 @@ import com.mergegen.config.TraversalRuleStore.TraversalRule;
 import java.io.IOException;
 import java.nio.file.*;
 import java.util.*;
-import java.util.stream.Collectors;
 
 /**
  * Persistiert Traversal-Regeln global pro Root-Tabelle.
@@ -13,7 +12,6 @@ import java.util.stream.Collectors;
  */
 public class GlobalTraversalRuleStore {
 
-    private static final String LIST_SEP = ";";
     private static final String DEFAULT_PATH = "config/mergegen/traversal-rules.txt";
 
     private final Path filePath;
@@ -56,7 +54,7 @@ public class GlobalTraversalRuleStore {
                 String[] parts = line.split("\\|", -1);
                 if (parts.length < 2) continue;
                 String table = parts[0].trim().toUpperCase();
-                Map<String, TraversalRule> rules = parseRules(parts[1]);
+                Map<String, TraversalRule> rules = TraversalRuleStore.parseRules(parts[1]);
                 if (!rules.isEmpty()) {
                     rulesByTable.put(table, rules);
                 }
@@ -73,7 +71,7 @@ public class GlobalTraversalRuleStore {
             lines.add("# Globale Traversal-Regeln pro Root-Tabelle");
             lines.add("# Format: ROOT_TABLE|PARENT>CHILD.FK=JA/NEIN/SUBSELECT;...");
             for (Map.Entry<String, Map<String, TraversalRule>> entry : rulesByTable.entrySet()) {
-                lines.add(entry.getKey() + "|" + formatRules(entry.getValue()));
+                lines.add(entry.getKey() + "|" + TraversalRuleStore.formatRules(entry.getValue()));
             }
             Files.write(filePath, lines);
         } catch (IOException e) {
@@ -81,37 +79,4 @@ public class GlobalTraversalRuleStore {
         }
     }
 
-    private static Map<String, TraversalRule> parseRules(String s) {
-        Map<String, TraversalRule> rules = new LinkedHashMap<>();
-        for (String part : s.split(LIST_SEP, -1)) {
-            part = part.trim();
-            if (part.isEmpty()) continue;
-            int eq = part.lastIndexOf('=');
-            if (eq < 0) continue;
-            String key = part.substring(0, eq).trim();
-            String val = part.substring(eq + 1).trim().toUpperCase();
-            TraversalRule rule;
-            switch (val) {
-                case "JA":        rule = TraversalRule.TRAVERSE;  break;
-                case "SUBSELECT": rule = TraversalRule.SUBSELECT; break;
-                default:          rule = TraversalRule.SKIP;      break;
-            }
-            rules.put(key, rule);
-        }
-        return rules;
-    }
-
-    private static String formatRules(Map<String, TraversalRule> rules) {
-        return rules.entrySet().stream()
-            .map(e -> {
-                String val;
-                switch (e.getValue()) {
-                    case TRAVERSE:  val = "JA";        break;
-                    case SUBSELECT: val = "SUBSELECT"; break;
-                    default:        val = "NEIN";      break;
-                }
-                return e.getKey() + "=" + val;
-            })
-            .collect(Collectors.joining(LIST_SEP));
-    }
 }

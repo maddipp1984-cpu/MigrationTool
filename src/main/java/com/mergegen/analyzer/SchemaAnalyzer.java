@@ -4,6 +4,7 @@ import com.mergegen.config.DatabaseConfig;
 import com.mergegen.model.ColumnInfo;
 import com.mergegen.model.ForeignKeyRelation;
 import com.mergegen.model.TableRow;
+import com.mergegen.util.SqlLiteralUtils;
 
 import java.sql.*;
 import java.time.format.DateTimeFormatter;
@@ -431,19 +432,11 @@ public class SchemaAnalyzer {
     }
 
     /**
-     * Hilfsmethode: gibt den gespeicherten SQL-Literal-Wert einer PK-Spalte zurück.
-     * Wird im TraversalService benötigt, um den PK-Wert für Child-Abfragen weiterzugeben.
-     */
-    public String getRawPkValue(TableRow row, String pkColumn) {
-        return row.getPkRawValue(pkColumn);
-    }
-
-    /**
      * Prüft ob in der angegebenen Tabelle ein Datensatz mit dem gegebenen Spaltenwert existiert.
      * Der Wert wird als SQL-Literal formatiert (Zahlen ohne, Strings mit Anführungszeichen).
      */
     public boolean existsRow(String table, String column, String value) throws SQLException {
-        String literal = com.mergegen.service.TraversalService.toSqlLiteral(value);
+        String literal = SqlLiteralUtils.toSqlLiteral(value);
         String sql = "SELECT 1 FROM " + schema + "." + table
                    + " WHERE " + column + " = " + literal
                    + " AND ROWNUM = 1";

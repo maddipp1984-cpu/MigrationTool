@@ -46,8 +46,9 @@ public class InsertGenPanel extends JPanel {
     private JButton saveBtn;
 
     private boolean dirty = false;
-    private int[] selectedViewCol = {-1};
+    private int selectedViewCol = -1;
     private final java.util.Map<String, String> fkSubselects = new java.util.LinkedHashMap<>();
+    private java.awt.KeyEventDispatcher pasteDispatcher;
 
     private Runnable resizeRowHeader;
     private Runnable updateRowCount;
@@ -80,7 +81,7 @@ public class InsertGenPanel extends JPanel {
             String pkCol = (String) pkCombo.getSelectedItem();
             boolean isPk = pkCol != null && !"(keine)".equals(pkCol) && pkCol.equals(headerName);
             boolean isFk = fkSubselects.containsKey(headerName);
-            if (col == selectedViewCol[0]) {
+            if (col == selectedViewCol) {
                 c.setBackground(COL_SELECT);
             } else if (isPk) {
                 c.setBackground(PK_COLOR);
@@ -129,7 +130,7 @@ public class InsertGenPanel extends JPanel {
                     renameColumn(col);
                     return;
                 }
-                selectedViewCol[0] = col;
+                selectedViewCol = col;
                 moveLeftBtn.setEnabled(col > 0);
                 moveRightBtn.setEnabled(col < table.getColumnCount() - 1);
                 table.getTableHeader().repaint();
@@ -137,20 +138,20 @@ public class InsertGenPanel extends JPanel {
         });
 
         moveLeftBtn.addActionListener(e -> {
-            int col = selectedViewCol[0];
+            int col = selectedViewCol;
             if (col <= 0) return;
             table.getColumnModel().moveColumn(col, col - 1);
-            selectedViewCol[0] = col - 1;
+            selectedViewCol = col - 1;
             moveLeftBtn.setEnabled(col - 1 > 0);
             moveRightBtn.setEnabled(true);
             table.getTableHeader().repaint();
         });
 
         moveRightBtn.addActionListener(e -> {
-            int col = selectedViewCol[0];
+            int col = selectedViewCol;
             if (col < 0 || col >= table.getColumnCount() - 1) return;
             table.getColumnModel().moveColumn(col, col + 1);
-            selectedViewCol[0] = col + 1;
+            selectedViewCol = col + 1;
             moveLeftBtn.setEnabled(true);
             moveRightBtn.setEnabled(col + 1 < table.getColumnCount() - 1);
             table.getTableHeader().repaint();
@@ -168,7 +169,7 @@ public class InsertGenPanel extends JPanel {
         });
 
         // ── Ctrl+V: Excel-Inhalt einfuegen ──────────────────────────────────
-        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(e -> {
+        pasteDispatcher = e -> {
             if (e.getID() == KeyEvent.KEY_PRESSED
                     && e.getKeyCode() == KeyEvent.VK_V
                     && e.isControlDown()
@@ -180,7 +181,8 @@ public class InsertGenPanel extends JPanel {
                 return true;
             }
             return false;
-        });
+        };
+        KeyboardFocusManager.getCurrentKeyboardFocusManager().addKeyEventDispatcher(pasteDispatcher);
 
         // ── Preset-Leiste ───────────────────────────────────────────────────
         presetCombo = new JComboBox<>();
@@ -244,7 +246,7 @@ public class InsertGenPanel extends JPanel {
                     JOptionPane.PLAIN_MESSAGE);
             if (name == null || name.isBlank()) return;
             model.addColumn(name.trim());
-            selectedViewCol[0] = -1;
+            selectedViewCol = -1;
             moveLeftBtn.setEnabled(false);
             moveRightBtn.setEnabled(false);
             autoResizeColumns();
@@ -280,17 +282,17 @@ public class InsertGenPanel extends JPanel {
 
         JButton deleteColBtn = new JButton("Spalte l\u00F6schen");
         deleteColBtn.addActionListener(e -> {
-            if (selectedViewCol[0] < 0 || selectedViewCol[0] >= table.getColumnCount()) return;
-            String colName = table.getColumnModel().getColumn(selectedViewCol[0])
+            if (selectedViewCol < 0 || selectedViewCol >= table.getColumnCount()) return;
+            String colName = table.getColumnModel().getColumn(selectedViewCol)
                     .getHeaderValue().toString();
             int confirm = JOptionPane.showConfirmDialog(this,
                     "Spalte \"" + colName + "\" l\u00F6schen?", "Best\u00E4tigen",
                     JOptionPane.YES_NO_OPTION);
             if (confirm != JOptionPane.YES_OPTION) return;
             fkSubselects.remove(colName);
-            int modelCol = table.convertColumnIndexToModel(selectedViewCol[0]);
+            int modelCol = table.convertColumnIndexToModel(selectedViewCol);
             removeColumn(modelCol);
-            selectedViewCol[0] = -1;
+            selectedViewCol = -1;
             moveLeftBtn.setEnabled(false);
             moveRightBtn.setEnabled(false);
             refreshPkCombo();
@@ -403,6 +405,14 @@ public class InsertGenPanel extends JPanel {
         add(statusBar,  BorderLayout.SOUTH);
     }
 
+    @Override
+    public void removeNotify() {
+        super.removeNotify();
+        if (pasteDispatcher != null) {
+            KeyboardFocusManager.getCurrentKeyboardFocusManager().removeKeyEventDispatcher(pasteDispatcher);
+        }
+    }
+
     // ── Preset-Verwaltung ───────────────────────────────────────────────────
 
     private void refreshPresetCombo() {
@@ -440,7 +450,7 @@ public class InsertGenPanel extends JPanel {
             fkSubselects.clear();
             fkSubselects.putAll(data.fkSubselects);
 
-            selectedViewCol[0] = -1;
+            selectedViewCol = -1;
             autoResizeColumns();
             clearDirty();
         } catch (IOException e) {
@@ -453,7 +463,7 @@ public class InsertGenPanel extends JPanel {
     private void clearTable() {
         model.setRowCount(0);
         model.setColumnCount(0);
-        selectedViewCol[0] = -1;
+        selectedViewCol = -1;
         refreshPkCombo();
         sequenceField.setText("");
         fkSubselects.clear();
@@ -720,7 +730,7 @@ public class InsertGenPanel extends JPanel {
                     model.addRow(row);
                 }
 
-                selectedViewCol[0] = -1;
+                selectedViewCol = -1;
                 autoResizeColumns();
                 refreshPkCombo();
                 markDirty();

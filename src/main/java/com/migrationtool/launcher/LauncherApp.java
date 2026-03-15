@@ -19,6 +19,7 @@ import com.mergegen.config.VirtualFkStore;
 import com.kostenattribute.InsertGenPanel;
 import com.mergegen.gui.ConstantTablePanel;
 import com.mergegen.gui.GeneratorPanel;
+import com.mergegen.util.PathUtils;
 import com.mergegen.gui.SequenceMappingPanel;
 import com.mergegen.gui.SettingsPanel;
 import com.mergegen.gui.VirtualFkPanel;
@@ -40,6 +41,11 @@ import java.util.List;
 public class LauncherApp {
 
     private static final Path THEME_FILE = Paths.get("config", "launcher", "theme.properties");
+
+    private static final String CARD_MERGEGEN   = "mergegen";
+    private static final String CARD_EXCELSPLIT  = "excelsplit";
+    private static final String CARD_SETTINGS    = "settings";
+    private static final String CARD_INSERTGEN   = "insertgen";
 
     public static void main(String[] args) {
         setupLookAndFeel();
@@ -128,10 +134,10 @@ public class LauncherApp {
 
         // ── Content-Bereich (CardLayout) ──────────────────────────────────────
         JPanel contentArea = new JPanel(new CardLayout());
-        contentArea.add(mergeGenPane,         "mergegen");
-        contentArea.add(excelPanel,           "excelsplit");
-        contentArea.add(settingsPanel,        "settings");
-        contentArea.add(insertGenPanel, "insertgen");
+        contentArea.add(mergeGenPane,         CARD_MERGEGEN);
+        contentArea.add(excelPanel,           CARD_EXCELSPLIT);
+        contentArea.add(settingsPanel,        CARD_SETTINGS);
+        contentArea.add(insertGenPanel,       CARD_INSERTGEN);
 
         // ── Navigationsbaum (statisch, nur zur Navigation) ────────────────────
         JScrollPane treePanel = buildNavTree(contentArea);
@@ -181,10 +187,10 @@ public class LauncherApp {
 
         // ── Node → Card-Mapping ───────────────────────────────────────────────
         Map<DefaultMutableTreeNode, String> nodeCards = new HashMap<>();
-        nodeCards.put(excelSplit,       "excelsplit");
-        nodeCards.put(mergeGen,         "mergegen");
-        nodeCards.put(insertGen,        "insertgen");
-        nodeCards.put(dbVerbindung,     "settings");
+        nodeCards.put(excelSplit,       CARD_EXCELSPLIT);
+        nodeCards.put(mergeGen,         CARD_MERGEGEN);
+        nodeCards.put(insertGen,        CARD_INSERTGEN);
+        nodeCards.put(dbVerbindung,     CARD_SETTINGS);
 
         // ── JTree ─────────────────────────────────────────────────────────────
         JTree tree = new JTree(root);
@@ -204,7 +210,7 @@ public class LauncherApp {
         tree.expandPath(new TreePath(mergescripte.getPath()));
         tree.expandPath(new TreePath(einstellungen.getPath()));
         tree.setSelectionPath(new TreePath(mergeGen.getPath()));
-        ((CardLayout) contentArea.getLayout()).show(contentArea, "mergegen");
+        ((CardLayout) contentArea.getLayout()).show(contentArea, CARD_MERGEGEN);
 
         JScrollPane scrollPane = new JScrollPane(tree);
         scrollPane.setBorder(null);
@@ -284,17 +290,6 @@ public class LauncherApp {
      * nach einem „master/"-Ordner, sonst aktuelles Arbeitsverzeichnis.
      */
     private static Path detectLauncherBasePath() {
-        try {
-            Path jar = Paths.get(
-                LauncherApp.class.getProtectionDomain().getCodeSource().getLocation().toURI()
-            ).toAbsolutePath();
-            Path current = jar.getParent();
-            for (int i = 0; i < 6; i++) {
-                if (current == null) break;
-                if (Files.isDirectory(current.resolve("master"))) return current;
-                current = current.getParent();
-            }
-        } catch (Exception ignored) { }
-        return Paths.get(".").toAbsolutePath().normalize();
+        return PathUtils.detectBasePath(LauncherApp.class);
     }
 }

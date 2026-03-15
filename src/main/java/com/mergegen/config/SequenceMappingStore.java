@@ -2,40 +2,51 @@ package com.mergegen.config;
 
 import com.mergegen.model.SequenceMapping;
 
-import java.io.*;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Optional;
 
 /**
- * Verwaltet Sequence-Zuordnungen für PK-Spalten.
+ * Verwaltet Sequence-Zuordnungen fuer PK-Spalten.
  *
  * Gespeichert in "sequence-mappings.txt" im Arbeitsverzeichnis.
  * Format: TABLE_NAME|PK_COLUMN|SEQUENCE_NAME (eine Zeile pro Eintrag)
  * Zeilen, die mit '#' beginnen, werden als Kommentare ignoriert.
  */
-public class SequenceMappingStore {
+public class SequenceMappingStore extends AbstractPipeStore<SequenceMapping> {
 
     private static final String FILE_NAME = "config/mergegen/sequence-mappings.txt";
-    private static final String SEPARATOR = "|";
-    private static final String COMMENT   = "#";
-
-    private final List<SequenceMapping> entries = new ArrayList<>();
 
     public SequenceMappingStore() {
-        load();
+        super(FILE_NAME,
+            "Sequence-Zuordnungen fuer PK-Spalten",
+            "Format: TABLE_NAME|PK_COLUMN|SEQUENCE_NAME");
     }
 
-    /** Gibt eine unveränderliche Kopie aller Einträge zurück. */
-    public List<SequenceMapping> getAll() {
-        return Collections.unmodifiableList(new ArrayList<>(entries));
+    @Override
+    protected SequenceMapping parseLine(String[] parts) {
+        return new SequenceMapping(
+            parts[0].trim(),
+            parts[1].trim(),
+            parts[2].trim()
+        );
     }
 
-    /** Fügt ein neues Mapping hinzu und speichert sofort. */
+    @Override
+    protected String formatEntry(SequenceMapping m) {
+        return m.getTableName() + "|" + m.getPkColumn() + "|" + m.getSequenceName();
+    }
+
+    @Override
+    protected int minFieldCount() { return 3; }
+
+    /** Fuegt ein neues Mapping hinzu und speichert sofort. */
     public void add(SequenceMapping mapping) {
         entries.add(mapping);
         save();
+    }
+
+    /** Fuegt ein Mapping hinzu ohne sofort zu speichern (fuer Batch-Updates). */
+    public void addWithoutSave(SequenceMapping mapping) {
+        entries.add(mapping);
     }
 
     /** Entfernt ein Mapping anhand von Tabelle und PK-Spalte und speichert sofort. */
@@ -46,47 +57,17 @@ public class SequenceMappingStore {
         save();
     }
 
-    /** Sucht ein Mapping für die angegebene Tabelle. */
+    /** Entfernt ein Mapping ohne sofort zu speichern (fuer Batch-Updates). */
+    public void removeWithoutSave(String tableName, String pkColumn) {
+        entries.removeIf(e ->
+            e.getTableName().equalsIgnoreCase(tableName) &&
+            e.getPkColumn().equalsIgnoreCase(pkColumn));
+    }
+
+    /** Sucht ein Mapping fuer die angegebene Tabelle. */
     public Optional<SequenceMapping> findByTable(String tableName) {
         return entries.stream()
             .filter(e -> e.getTableName().equalsIgnoreCase(tableName))
             .findFirst();
-    }
-
-    private void load() {
-        File file = new File(FILE_NAME);
-        if (!file.exists()) return;
-        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
-            String line;
-            while ((line = reader.readLine()) != null) {
-                line = line.trim();
-                if (line.isEmpty() || line.startsWith(COMMENT)) continue;
-                String[] parts = line.split("\\|", -1);
-                if (parts.length != 3) continue;
-                entries.add(new SequenceMapping(
-                    parts[0].trim(),
-                    parts[1].trim(),
-                    parts[2].trim()
-                ));
-            }
-        } catch (IOException ex) {
-            System.err.println("sequence-mappings.txt konnte nicht geladen werden: " + ex.getMessage());
-        }
-    }
-
-    private void save() {
-        File file = new File(FILE_NAME);
-        file.getParentFile().mkdirs();
-        try (PrintWriter writer = new PrintWriter(new FileWriter(file))) {
-            writer.println("# Sequence-Zuordnungen fuer PK-Spalten");
-            writer.println("# Format: TABLE_NAME|PK_COLUMN|SEQUENCE_NAME");
-            for (SequenceMapping m : entries) {
-                writer.println(m.getTableName() + SEPARATOR +
-                               m.getPkColumn()  + SEPARATOR +
-                               m.getSequenceName());
-            }
-        } catch (IOException ex) {
-            System.err.println("sequence-mappings.txt konnte nicht gespeichert werden: " + ex.getMessage());
-        }
     }
 }

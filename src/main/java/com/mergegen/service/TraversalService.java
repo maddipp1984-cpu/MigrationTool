@@ -8,6 +8,8 @@ import com.mergegen.model.ForeignKeyRelation;
 import com.mergegen.model.TableRow;
 import com.mergegen.model.TraversalResult;
 
+import com.mergegen.util.SqlLiteralUtils;
+
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Files;
@@ -130,7 +132,6 @@ public class TraversalService {
         if (logger != null) logger.accept(msg);
         if (logWriter != null) {
             logWriter.println(msg);
-            logWriter.flush();
         }
     }
 
@@ -203,6 +204,8 @@ public class TraversalService {
         // PK-Cache: vermeidet mehrfache SQL-Abfragen fuer dieselbe Tabelle
         Map<String, List<String>> pkCache = new HashMap<>();
         pkCache.put(rootTable.toUpperCase(), pkCols);
+        // Child-Relations-Cache: vermeidet mehrfache SQL-Abfragen fuer dieselbe Tabelle
+        Map<String, List<ForeignKeyRelation>> childRelCache = new HashMap<>();
         // subselectRows: Referenz-Zeilen fuer Subselect-Ersetzung (TABLE#PK_VALUE -> Row)
         Map<String, TableRow> subselectRows = new HashMap<>();
 
@@ -290,19 +293,8 @@ public class TraversalService {
 
         // ── Root: eingehende FKs (Kinder der Root-Tabelle) direkt suchen ──
         log("Eingehende FK-Spalten suchen für " + rootTable + "...");
-        List<ForeignKeyRelation> rootIncoming = new ArrayList<>(analyzer.getChildRelations(rootTable));
-        if (virtualFkStore != null) {
-            for (ForeignKeyRelation vfk : virtualFkStore.getRelationsForParent(rootTable)) {
-                boolean nowReal = rootIncoming.stream().anyMatch(r ->
-                    r.getChildTable().equalsIgnoreCase(vfk.getChildTable()) &&
-                    r.getFkColumn().equalsIgnoreCase(vfk.getFkColumn()));
-                if (nowReal) {
-                    virtualFkStore.remove(vfk);
-                } else {
-                    rootIncoming.add(vfk);
-                }
-            }
-        }
+        List<ForeignKeyRelation> rootIncoming = mergeVirtualFks(rootTable,
+                getCachedChildRelations(rootTable, childRelCache));
 
         for (ForeignKeyRelation rel : rootIncoming) {
             fkRelations.computeIfAbsent(rel.getChildTable().toUpperCase(), k -> new ArrayList<>())
@@ -380,23 +372,8 @@ public class TraversalService {
             tableCounts.merge(currentTable, 1, Integer::sum);
 
             log("Kinder suchen für " + currentTable + " (bisher: " + orderedRows.size() + " Zeilen in " + tableCounts.size() + " Tabellen)");
-            List<ForeignKeyRelation> realRelations = analyzer.getChildRelations(currentTable);
-
-            if (virtualFkStore != null) {
-                for (ForeignKeyRelation vfk : virtualFkStore.getRelationsForParent(currentTable)) {
-                    boolean nowReal = realRelations.stream().anyMatch(r ->
-                        r.getChildTable().equalsIgnoreCase(vfk.getChildTable()) &&
-                        r.getFkColumn().equalsIgnoreCase(vfk.getFkColumn()));
-                    if (nowReal) {
-                        virtualFkStore.remove(vfk);
-                    }
-                }
-            }
-
-            List<ForeignKeyRelation> childRelations = new ArrayList<>(realRelations);
-            if (virtualFkStore != null) {
-                childRelations.addAll(virtualFkStore.getRelationsForParent(currentTable));
-            }
+            List<ForeignKeyRelation> childRelations = mergeVirtualFks(currentTable,
+                    getCachedChildRelations(currentTable, childRelCache));
 
             for (ForeignKeyRelation rel : childRelations) {
                 fkRelations.computeIfAbsent(rel.getChildTable().toUpperCase(), k -> new ArrayList<>())
@@ -481,12 +458,12 @@ public class TraversalService {
     private List<TableRow> topoSort(List<TableRow> rows,
                                      Map<String, List<ForeignKeyRelation>> fkRelations,
                                      String rootTable) {
-        // Alle Tabellen sammeln (in BFS-Reihenfolge)
-        List<String> tables = new ArrayList<>();
+        // Alle Tabellen sammeln (in BFS-Reihenfolge, O(1) contains durch LinkedHashSet)
+        LinkedHashSet<String> tableSet = new LinkedHashSet<>();
         for (TableRow row : rows) {
-            String t = row.getTableName().toUpperCase();
-            if (!tables.contains(t)) tables.add(t);
+            tableSet.add(row.getTableName().toUpperCase());
         }
+        List<String> tables = new ArrayList<>(tableSet);
 
         // Abhängigkeitsgraph aufbauen: childTable hängt von parentTable ab
         // (= parentTable muss vor childTable kommen)
@@ -523,12 +500,20 @@ public class TraversalService {
             }
         }
 
+        // Build reverse adjacency: when 't' is processed, reduce in-degree of 'dependedBy.get(t)'
+        Map<String, List<String>> dependedBy = new HashMap<>();
+        for (Map.Entry<String, Set<String>> e : dependsOn.entrySet()) {
+            for (String dep : e.getValue()) {
+                dependedBy.computeIfAbsent(dep, k -> new ArrayList<>()).add(e.getKey());
+            }
+        }
+
         List<String> sortedTables = new ArrayList<>();
         while (!ready.isEmpty()) {
             String t = ready.poll();
             sortedTables.add(t);
-            // In-Degree der abhängigen Tabellen reduzieren
-            for (String other : tables) {
+            List<String> dependents = dependedBy.getOrDefault(t, Collections.emptyList());
+            for (String other : dependents) {
                 if (dependsOn.containsKey(other) && dependsOn.get(other).remove(t)) {
                     int newDegree = inDegree.merge(other, -1, Integer::sum);
                     if (newDegree == 0) ready.add(other);
@@ -557,6 +542,38 @@ public class TraversalService {
             if (tableRows != null) result.addAll(tableRows);
         }
         return result;
+    }
+
+    /** Bereinigt virtuelle FKs die inzwischen als echte Constraints existieren. */
+    private List<ForeignKeyRelation> mergeVirtualFks(String table, List<ForeignKeyRelation> realRelations) {
+        if (virtualFkStore == null) return realRelations;
+        List<ForeignKeyRelation> merged = new ArrayList<>(realRelations);
+        for (ForeignKeyRelation vfk : virtualFkStore.getRelationsForParent(table)) {
+            boolean nowReal = realRelations.stream().anyMatch(r ->
+                r.getChildTable().equalsIgnoreCase(vfk.getChildTable()) &&
+                r.getFkColumn().equalsIgnoreCase(vfk.getFkColumn()));
+            if (nowReal) {
+                virtualFkStore.remove(vfk);
+            } else {
+                merged.add(vfk);
+            }
+        }
+        return merged;
+    }
+
+    /** Cached Child-Relations-Abfrage (vermeidet wiederholte SQL-Queries fuer dieselbe Tabelle). */
+    private List<ForeignKeyRelation> getCachedChildRelations(String table,
+                                                              Map<String, List<ForeignKeyRelation>> cache) {
+        String key = table.toUpperCase();
+        List<ForeignKeyRelation> cached = cache.get(key);
+        if (cached != null) return cached;
+        try {
+            cached = analyzer.getChildRelations(table);
+        } catch (Exception e) {
+            cached = Collections.emptyList();
+        }
+        cache.put(key, cached);
+        return cached;
     }
 
     /** Cached PK-Spalten-Abfrage (vermeidet wiederholte SQL-Queries für dieselbe Tabelle). */
@@ -669,14 +686,6 @@ public class TraversalService {
      *   "O'Brien"  → 'O''Brien'
      */
     public static String toSqlLiteral(String value) {
-        if (value == null || value.isBlank()) {
-            throw new IllegalArgumentException("Wert darf nicht leer sein.");
-        }
-        try {
-            Long.parseLong(value.trim());
-            return value.trim();
-        } catch (NumberFormatException e) {
-            return "'" + value.trim().replace("'", "''") + "'";
-        }
+        return SqlLiteralUtils.toSqlLiteral(value);
     }
 }
