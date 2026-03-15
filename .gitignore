@@ -27,6 +27,7 @@ bin/
 
 # Lokale IDE/Claude-Einstellungen
 .claude/
+.superpowers/
 .idea/
 *.iml
 .vscode/

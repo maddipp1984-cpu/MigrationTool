@@ -167,48 +167,86 @@ public class LauncherApp {
     private static JScrollPane buildNavTree(JPanel contentArea) {
 
         // ── Knoten ────────────────────────────────────────────────────────────
-        DefaultMutableTreeNode root             = new DefaultMutableTreeNode("root");
-        DefaultMutableTreeNode exceltools      = new DefaultMutableTreeNode("Exceltools");
-        DefaultMutableTreeNode excelSplit      = new DefaultMutableTreeNode("Excel Split");
-        DefaultMutableTreeNode mergescripte         = new DefaultMutableTreeNode("Mergescripte");
-        DefaultMutableTreeNode mergeGen             = new DefaultMutableTreeNode("MERGE Generator");
-        DefaultMutableTreeNode insertGen            = new DefaultMutableTreeNode("INSERT Generator");
-        DefaultMutableTreeNode einstellungen   = new DefaultMutableTreeNode("Einstellungen");
-        DefaultMutableTreeNode dbVerbindung    = new DefaultMutableTreeNode("DB-Verbindung");
+        DefaultMutableTreeNode root       = new DefaultMutableTreeNode("root");
+        DefaultMutableTreeNode catExcel   = new DefaultMutableTreeNode("EXCEL");
+        DefaultMutableTreeNode excelSplit = new DefaultMutableTreeNode("Excel Split");
+        DefaultMutableTreeNode catScript  = new DefaultMutableTreeNode("SCRIPTE");
+        DefaultMutableTreeNode mergeGen   = new DefaultMutableTreeNode("MERGE Generator");
+        DefaultMutableTreeNode insertGen  = new DefaultMutableTreeNode("INSERT Generator");
+        DefaultMutableTreeNode catConfig  = new DefaultMutableTreeNode("KONFIGURATION");
+        DefaultMutableTreeNode dbVerb     = new DefaultMutableTreeNode("DB-Verbindung");
 
-        exceltools.add(excelSplit);
-        mergescripte.add(mergeGen);
-        mergescripte.add(insertGen);
-        einstellungen.add(dbVerbindung);
+        catExcel.add(excelSplit);
+        catScript.add(mergeGen);
+        catScript.add(insertGen);
+        catConfig.add(dbVerb);
 
-        root.add(exceltools);
-        root.add(mergescripte);
-        root.add(einstellungen);
+        root.add(catExcel);
+        root.add(catScript);
+        root.add(catConfig);
+
+        // ── Kategorie-Knoten (nicht selektierbar) ───────────────────────────
+        Set<DefaultMutableTreeNode> categoryNodes = new HashSet<>(
+                Arrays.asList(catExcel, catScript, catConfig));
 
         // ── Node → Card-Mapping ───────────────────────────────────────────────
         Map<DefaultMutableTreeNode, String> nodeCards = new HashMap<>();
-        nodeCards.put(excelSplit,       CARD_EXCELSPLIT);
-        nodeCards.put(mergeGen,         CARD_MERGEGEN);
-        nodeCards.put(insertGen,        CARD_INSERTGEN);
-        nodeCards.put(dbVerbindung,     CARD_SETTINGS);
+        nodeCards.put(excelSplit, CARD_EXCELSPLIT);
+        nodeCards.put(mergeGen,   CARD_MERGEGEN);
+        nodeCards.put(insertGen,  CARD_INSERTGEN);
+        nodeCards.put(dbVerb,     CARD_SETTINGS);
 
         // ── JTree ─────────────────────────────────────────────────────────────
         JTree tree = new JTree(root);
         tree.setRootVisible(false);
-        tree.setShowsRootHandles(true);
+        tree.setShowsRootHandles(false);
+        tree.setToggleClickCount(0); // Kategorien nicht ein-/ausklappbar
 
+        // ── Custom Renderer: Kategorie-Labels klein, grau, UPPERCASE ────────
+        tree.setCellRenderer(new DefaultTreeCellRenderer() {
+            {
+                setLeafIcon(null);
+                setOpenIcon(null);
+                setClosedIcon(null);
+            }
+
+            @Override
+            public Component getTreeCellRendererComponent(JTree tree, Object value,
+                    boolean sel, boolean expanded, boolean leaf, int row, boolean hasFocus) {
+                super.getTreeCellRendererComponent(tree, value, sel, expanded, leaf, row, hasFocus);
+                DefaultMutableTreeNode node = (DefaultMutableTreeNode) value;
+                if (categoryNodes.contains(node)) {
+                    setFont(getFont().deriveFont(Font.PLAIN, 10f));
+                    setForeground(UIManager.getColor("Label.disabledForeground") != null
+                            ? UIManager.getColor("Label.disabledForeground")
+                            : Color.GRAY);
+                    setEnabled(false);
+                    setBorder(BorderFactory.createEmptyBorder(8, 8, 2, 0));
+                } else {
+                    setFont(getFont().deriveFont(Font.PLAIN, 12f));
+                    setBorder(BorderFactory.createEmptyBorder(2, 12, 2, 0));
+                }
+                return this;
+            }
+        });
+
+        // ── Selection: Kategorie-Klicks ignorieren ──────────────────────────
         tree.addTreeSelectionListener(e -> {
             DefaultMutableTreeNode selected =
                     (DefaultMutableTreeNode) tree.getLastSelectedPathComponent();
             if (selected == null) return;
+            if (categoryNodes.contains(selected)) {
+                tree.clearSelection();
+                return;
+            }
             String card = nodeCards.get(selected);
             if (card != null) ((CardLayout) contentArea.getLayout()).show(contentArea, card);
         });
 
         // ── Alle Kategorien aufgeklappt, MERGE Generator vorausgewählt ────────
-        tree.expandPath(new TreePath(exceltools.getPath()));
-        tree.expandPath(new TreePath(mergescripte.getPath()));
-        tree.expandPath(new TreePath(einstellungen.getPath()));
+        tree.expandPath(new TreePath(catExcel.getPath()));
+        tree.expandPath(new TreePath(catScript.getPath()));
+        tree.expandPath(new TreePath(catConfig.getPath()));
         tree.setSelectionPath(new TreePath(mergeGen.getPath()));
         ((CardLayout) contentArea.getLayout()).show(contentArea, CARD_MERGEGEN);
 
