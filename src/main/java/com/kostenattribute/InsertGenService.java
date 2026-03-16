@@ -148,7 +148,6 @@ public class InsertGenService {
                                      List<String[]> rows, String pkColumn, String sequenceName,
                                      Map<String, String> fkSubselects) {
         StringBuilder sb = new StringBuilder();
-        sb.append("DELETE FROM ").append(tableName).append(";\n\n");
 
         boolean hasSequence = pkColumn != null && !pkColumn.isEmpty()
                 && sequenceName != null && !sequenceName.isEmpty();
@@ -194,10 +193,16 @@ public class InsertGenService {
                     sqlVal = resolved.startsWith("(") ? resolved : "(" + resolved + ")";
                 } else if (cell != null && !cell.isBlank() && isSqlKeyword(cell.trim())) {
                     sqlVal = cell.trim().toUpperCase();
+                } else if (cell == null || cell.isBlank()) {
+                    sqlVal = "NULL";
                 } else {
-                    sqlVal = (cell == null || cell.isBlank())
-                            ? "NULL"
-                            : "'" + cell.replace("'", "''") + "'";
+                    String trimmed = cell.trim();
+                    try {
+                        Double.parseDouble(trimmed);
+                        sqlVal = trimmed;
+                    } catch (NumberFormatException e2) {
+                        sqlVal = "'" + trimmed.replace("'", "''") + "'";
+                    }
                 }
 
                 selectValues.add(sqlVal);

@@ -58,7 +58,15 @@ public class InsertGenPanel extends JPanel {
 
         // ── Tabelle (initial leer, keine Spalten) ───────────────────────────
         model = new DefaultTableModel(new String[0], 0) {
-            @Override public boolean isCellEditable(int row, int col) { return true; }
+            @Override public boolean isCellEditable(int row, int col) {
+                String pkCol = (String) pkCombo.getSelectedItem();
+                if (pkCol != null && !"(keine)".equals(pkCol)) {
+                    String colName = table.getColumnModel().getColumn(
+                            table.convertColumnIndexToView(col)).getHeaderValue().toString();
+                    if (pkCol.equals(colName)) return false;
+                }
+                return true;
+            }
         };
 
         table = new JTable(model);
@@ -83,17 +91,20 @@ public class InsertGenPanel extends JPanel {
             String pkCol = (String) pkCombo.getSelectedItem();
             boolean isPk = pkCol != null && !"(keine)".equals(pkCol) && pkCol.equals(headerName);
             boolean isFk = fkSubselects.containsKey(headerName);
+            Font baseFont = UIManager.getFont("TableHeader.font");
+            if (baseFont == null) baseFont = c.getFont().deriveFont(Font.PLAIN);
             if (col == selectedViewCol) {
                 c.setBackground(COL_SELECT);
+                c.setFont(baseFont);
             } else if (isPk) {
                 c.setBackground(PK_COLOR);
-                c.setFont(c.getFont().deriveFont(Font.BOLD));
+                c.setFont(baseFont.deriveFont(Font.BOLD));
             } else if (isFk) {
                 c.setBackground(FK_COLOR);
-                c.setFont(c.getFont().deriveFont(Font.ITALIC));
+                c.setFont(baseFont.deriveFont(Font.ITALIC));
             } else {
                 c.setBackground(UIManager.getColor("TableHeader.background"));
-                c.setFont(c.getFont().deriveFont(Font.PLAIN));
+                c.setFont(baseFont);
             }
             return c;
         });
@@ -214,8 +225,19 @@ public class InsertGenPanel extends JPanel {
         pkCombo.setPreferredSize(new Dimension(150, 26));
         pkCombo.addItem("(keine)");
         pkCombo.addItemListener(e -> {
-            if (e.getStateChange() == java.awt.event.ItemEvent.SELECTED)
+            if (e.getStateChange() == java.awt.event.ItemEvent.SELECTED) {
+                String selected = (String) pkCombo.getSelectedItem();
+                if (selected != null && !"(keine)".equals(selected)) {
+                    for (int c = 0; c < table.getColumnCount(); c++) {
+                        if (selected.equals(table.getColumnModel().getColumn(c).getHeaderValue().toString())) {
+                            for (int r = 0; r < model.getRowCount(); r++)
+                                model.setValueAt("", r, table.convertColumnIndexToModel(c));
+                            break;
+                        }
+                    }
+                }
                 table.getTableHeader().repaint();
+            }
         });
 
         sequenceField = new JTextField(15);
@@ -229,11 +251,12 @@ public class InsertGenPanel extends JPanel {
         presetBar.add(Box.createHorizontalStrut(12));
         presetBar.add(new JLabel("Zieltabelle:"));
         presetBar.add(tableNameField);
-        presetBar.add(Box.createHorizontalStrut(12));
-        presetBar.add(new JLabel("PK-Spalte:"));
-        presetBar.add(pkCombo);
-        presetBar.add(new JLabel("Sequence:"));
-        presetBar.add(sequenceField);
+
+        JPanel tableSettingsBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
+        tableSettingsBar.add(new JLabel("PK-Spalte:"));
+        tableSettingsBar.add(pkCombo);
+        tableSettingsBar.add(new JLabel("Sequence:"));
+        tableSettingsBar.add(sequenceField);
 
         // ── Toolbar ─────────────────────────────────────────────────────────
         JButton addColBtn = new JButton("\u2795");
@@ -317,6 +340,7 @@ public class InsertGenPanel extends JPanel {
         JPanel topPanel = new JPanel();
         topPanel.setLayout(new BoxLayout(topPanel, BoxLayout.Y_AXIS));
         topPanel.add(presetBar);
+        topPanel.add(tableSettingsBar);
         topPanel.add(toolbar);
 
         // ── ScrollPane ──────────────────────────────────────────────────────
@@ -830,6 +854,7 @@ public class InsertGenPanel extends JPanel {
             JOptionPane.showMessageDialog(this,
                     result.insertCount + " INSERT(s) generiert.\nDatei: " + sqlFile.toAbsolutePath(),
                     "Script gespeichert", JOptionPane.INFORMATION_MESSAGE);
+            Desktop.getDesktop().open(sqlFile.toFile());
         } catch (IOException ex) {
             JOptionPane.showMessageDialog(this,
                     "Fehler beim Schreiben: " + ex.getMessage(),
