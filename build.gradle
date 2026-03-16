@@ -2,6 +2,7 @@ plugins {
     id 'java'
     id 'application'
     id 'com.gradleup.shadow' version '8.3.6'
+    id 'info.solidsoft.pitest' version '1.15.0'
 }
 
 group = 'com.migrationtool'
@@ -58,6 +59,17 @@ tasks.register('integrationTest', Test) {
         events 'passed', 'failed', 'skipped'
         showStandardStreams = true
     }
+}
+
+// ── PITest: Mutation Testing ─────────────────────────────────────────────────
+pitest {
+    targetClasses = ['com.excelsplit.*', 'com.kostenattribute.*', 'com.mergegen.**']
+    targetTests   = ['com.excelsplit.*', 'com.mergegen.**']
+    junit5PluginVersion = '1.2.1'
+    threads = 4
+    outputFormats = ['HTML']
+    timestampedReports = false
+    mutationThreshold = 0
 }
 
 // ── Fat-JAR (Shadow) ─────────────────────────────────────────────────────────

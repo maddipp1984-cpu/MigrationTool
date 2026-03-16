@@ -263,6 +263,100 @@ class ExcelSplitServiceTest {
         assertTrue(logMessages.stream().anyMatch(m -> m.contains("WARNUNG")));
     }
 
+    @Test
+    void processFiles_fortschrittsmeldungen_mit_zaehler(@TempDir Path tempDir) throws Exception {
+        Path outputDir = tempDir.resolve("output");
+
+        Workbook wb1 = createWorkbook(
+                new String[][]{{"H1", "H2", "H3"}, {"D1", "D2", "D3"}},
+                new String[][]{{"FILE_A", "V1"}}
+        );
+        Workbook wb2 = createWorkbook(
+                new String[][]{{"H1", "H2", "H3"}, {"D1", "D2", "D3"}},
+                new String[][]{{"FILE_B", "V2"}}
+        );
+        Path f1 = writeWorkbook(wb1, tempDir, "a.xlsx");
+        Path f2 = writeWorkbook(wb2, tempDir, "b.xlsx");
+
+        List<String> logMessages = new ArrayList<>();
+        service.processFiles(List.of(f1, f2), outputDir, logMessages::add);
+
+        // Fortschrittszaehler korrekt
+        assertTrue(logMessages.stream().anyMatch(m -> m.contains("[1/2]")));
+        assertTrue(logMessages.stream().anyMatch(m -> m.contains("[2/2]")));
+    }
+
+    @Test
+    void processFiles_validierung_ok_bei_korrekter_zeilenanzahl(@TempDir Path tempDir) throws Exception {
+        Path outputDir = tempDir.resolve("output");
+
+        Workbook wb = createWorkbook(
+                new String[][]{{"H1", "H2", "H3"}, {"D1", "D2", "D3"}, {"D4", "D5", "D6"}},
+                new String[][]{{"VAL_OK", "V"}}
+        );
+        Path xlsxFile = writeWorkbook(wb, tempDir, "valok.xlsx");
+
+        List<String> logMessages = new ArrayList<>();
+        service.processFiles(List.of(xlsxFile), outputDir, logMessages::add);
+
+        // Validierung meldet OK
+        assertTrue(logMessages.stream().anyMatch(m -> m.contains("[OK]")));
+        // Log-Datei enthaelt OK
+        Path logFile = outputDir.resolve("validierung.log");
+        String logContent = Files.readString(logFile, StandardCharsets.UTF_8);
+        assertTrue(logContent.contains("OK"));
+    }
+
+    @Test
+    void buildCsv_leere_zellen_werden_als_leer_behandelt() {
+        // Sheet1 mit lueckenhaften Zellen – Arrays.fill muss "" setzen
+        Workbook wb = new XSSFWorkbook();
+        openWorkbooks.add(wb);
+        Sheet s1 = wb.createSheet("Sheet1");
+        Row header = s1.createRow(0);
+        header.createCell(0).setCellValue("H1");
+        header.createCell(1).setCellValue("H2");
+        header.createCell(2).setCellValue("H3");
+        header.createCell(3).setCellValue("H4");
+        header.createCell(4).setCellValue("H5");
+        // Datenzeile: nur Spalte 0 und 4 befuellt, 1-3 leer
+        Row data = s1.createRow(1);
+        data.createCell(0).setCellValue("A");
+        data.createCell(4).setCellValue("E");
+        wb.createSheet("Sheet2").createRow(0).createCell(0).setCellValue("TPL");
+
+        List<String> lines = service.buildCsv(s1, "TPL", "VAL");
+        String[] cells = lines.get(1).split(";", -1);
+        // Leere Zellen muessen leer sein (nicht null oder fehlen)
+        assertEquals("A", cells[0]);
+        assertEquals("", cells[1]);
+        assertEquals("TPL", cells[2]); // Spalte C ersetzt
+        assertEquals("", cells[3]);
+        assertEquals("VAL", cells[4]); // Spalte E ersetzt
+    }
+
+    @Test
+    void buildCsv_genau_3_spalten_spalteC_wird_ersetzt() {
+        Workbook wb = createWorkbook(
+                new String[][]{{"H1", "H2", "H3"}, {"A", "B", "alt"}},
+                new String[][]{{"TPL", "V"}}
+        );
+        List<String> lines = service.buildCsv(wb.getSheetAt(0), "TPL", "V");
+        // Genau 3 Spalten (maxCol > 2 ist true)
+        assertEquals("TPL", lines.get(1).split(";", -1)[2]);
+    }
+
+    @Test
+    void buildCsv_genau_5_spalten_spalteE_wird_ersetzt() {
+        Workbook wb = createWorkbook(
+                new String[][]{{"H1", "H2", "H3", "H4", "H5"}, {"A", "B", "C", "D", "alt"}},
+                new String[][]{{"TPL", "V"}}
+        );
+        List<String> lines = service.buildCsv(wb.getSheetAt(0), "TPL", "WERT");
+        // Genau 5 Spalten (maxCol > 4 ist true)
+        assertEquals("WERT", lines.get(1).split(";", -1)[4]);
+    }
+
     // ── escapeCsv ────────────────────────────────────────────────────────────
 
     @Test
