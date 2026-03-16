@@ -87,13 +87,29 @@ public class ExcelSplitService {
     private void processFile(Path xlsx, Path outputDir, Consumer<String> log, List<String> logEntries) {
         try (Workbook wb = WorkbookFactory.create(xlsx.toFile(), null, true)) {
 
-            Sheet  sheet2 = wb.getSheetAt(1);
-            Row    row1   = (sheet2 != null) ? sheet2.getRow(0) : null;
-            String templateName  = (row1 != null) ? getCellValue(row1.getCell(0), wb) : "";
-            String templateValue = (row1 != null) ? getCellValue(row1.getCell(1), wb) : "";
+            Sheet sheet2 = wb.getSheetAt(1);
+            if (sheet2 == null || sheet2.getRow(0) == null) {
+                log.accept("  WARNUNG: Sheet 2 leer – übersprungen.");
+                logEntries.add("WARNUNG " + xlsx.getFileName() + " - Sheet 2 leer");
+                return;
+            }
+
+            // Alle Zeilen aus Sheet 2 lesen: Spalte A = Template-Name, Spalte B = Werte
+            String templateName = "";
+            List<String> templateValues = new ArrayList<>();
+            for (int r = 0; r <= sheet2.getLastRowNum(); r++) {
+                Row row = sheet2.getRow(r);
+                if (row == null) continue;
+                String colA = getCellValue(row.getCell(0), wb).trim();
+                String colB = getCellValue(row.getCell(1), wb).trim();
+                if (colA.isEmpty()) continue;
+                if (templateName.isEmpty()) templateName = colA;
+                if (!colB.isEmpty()) templateValues.add(colB);
+            }
+            String templateValue = String.join("!", templateValues);
 
             if (templateName.isEmpty()) {
-                log.accept("  WARNUNG: Kein Template-Name in Sheet 2, Zeile 1 – übersprungen.");
+                log.accept("  WARNUNG: Kein Template-Name in Sheet 2 – übersprungen.");
                 logEntries.add("WARNUNG " + xlsx.getFileName() + " - kein Template-Name");
                 return;
             }
