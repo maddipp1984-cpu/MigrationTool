@@ -187,7 +187,7 @@ public class MainWindow {
         checkBoxes.clear();
 
         if (files.isEmpty()) {
-            masterListPanel.add(new JLabel("<html><i>Keine .xlsx-Dateien gefunden.</i></html>"));
+            masterListPanel.add(new JLabel("<html><i>Keine Excel-Dateien (.xls/.xlsx) gefunden.</i></html>"));
         } else {
             for (Path f : files) {
                 JCheckBox cb = new JCheckBox(f.getFileName().toString(), true);

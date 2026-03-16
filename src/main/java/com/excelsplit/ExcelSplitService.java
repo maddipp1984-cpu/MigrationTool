@@ -25,11 +25,14 @@ import org.apache.poi.ss.usermodel.WorkbookFactory;
 public class ExcelSplitService {
 
     /**
-     * Gibt alle .xlsx-Dateien im angegebenen Verzeichnis sortiert zurück.
+     * Gibt alle Excel-Dateien (.xls und .xlsx) im angegebenen Verzeichnis sortiert zurück.
      */
     public List<Path> listMasterFiles(Path masterDir) {
         File[] files = masterDir.toFile().listFiles(
-            (dir, name) -> name.toLowerCase().endsWith(".xlsx")
+            (dir, name) -> {
+                String lower = name.toLowerCase();
+                return lower.endsWith(".xlsx") || lower.endsWith(".xls");
+            }
         );
         if (files == null || files.length == 0) return List.of();
         Arrays.sort(files);
@@ -39,7 +42,7 @@ public class ExcelSplitService {
     /**
      * Verarbeitet alle übergebenen Dateien und gibt den Pfad zur Log-Datei zurück.
      *
-     * @param files     zu verarbeitende .xlsx-Dateien
+     * @param files     zu verarbeitende Excel-Dateien (.xls/.xlsx)
      * @param outputDir Ausgabeverzeichnis für CSV-Dateien
      * @param log       Callback für Fortschrittsmeldungen
      * @return Pfad zur erstellten validierung.log
