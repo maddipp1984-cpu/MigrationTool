@@ -179,15 +179,21 @@ public class InsertGenService {
                         literal = "NULL";
                     } else {
                         String trimmed = cell.trim();
-                        try {
-                            Double.parseDouble(trimmed);
-                            literal = trimmed;
-                        } catch (NumberFormatException e2) {
-                            literal = "'" + trimmed.replace("'", "''") + "'";
+                        if (isSqlKeyword(trimmed)) {
+                            literal = trimmed.toUpperCase();
+                        } else {
+                            try {
+                                Double.parseDouble(trimmed);
+                                literal = trimmed;
+                            } catch (NumberFormatException e2) {
+                                literal = "'" + trimmed.replace("'", "''") + "'";
+                            }
                         }
                     }
                     String resolved = fkSub.replace("{WERT}", literal);
                     sqlVal = resolved.startsWith("(") ? resolved : "(" + resolved + ")";
+                } else if (cell != null && !cell.isBlank() && isSqlKeyword(cell.trim())) {
+                    sqlVal = cell.trim().toUpperCase();
                 } else {
                     sqlVal = (cell == null || cell.isBlank())
                             ? "NULL"
@@ -196,8 +202,8 @@ public class InsertGenService {
 
                 selectValues.add(sqlVal);
 
-                // WHERE NOT EXISTS: PK-Spalte mit Sequence ueberspringen
-                if (c != pkIndex) {
+                // WHERE NOT EXISTS: PK-Spalte mit Sequence und dynamische Keywords ueberspringen
+                if (c != pkIndex && !isDynamicSqlKeyword(sqlVal)) {
                     if ("NULL".equals(sqlVal)) {
                         whereConditions.add(col + " IS NULL");
                     } else {
@@ -227,6 +233,22 @@ public class InsertGenService {
         Files.createDirectories(sqlFile.getParent());
         Files.writeString(sqlFile, sql, StandardCharsets.UTF_8);
         return sqlFile;
+    }
+
+    private static final java.util.Set<String> SQL_KEYWORDS = java.util.Set.of(
+            "SYSDATE", "SYSTIMESTAMP", "USER", "CURRENT_DATE", "CURRENT_TIMESTAMP"
+    );
+
+    private static final java.util.Set<String> DYNAMIC_SQL_KEYWORDS = java.util.Set.of(
+            "SYSDATE", "SYSTIMESTAMP", "CURRENT_DATE", "CURRENT_TIMESTAMP"
+    );
+
+    private static boolean isSqlKeyword(String value) {
+        return SQL_KEYWORDS.contains(value.toUpperCase());
+    }
+
+    private static boolean isDynamicSqlKeyword(String value) {
+        return DYNAMIC_SQL_KEYWORDS.contains(value.toUpperCase());
     }
 
     // ── CSV-Hilfsmethoden ───────────────────────────────────────────────────

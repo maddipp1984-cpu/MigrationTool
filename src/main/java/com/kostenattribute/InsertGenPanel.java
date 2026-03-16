@@ -8,6 +8,7 @@ import javax.swing.table.AbstractTableModel;
 import javax.swing.table.TableColumn;
 import java.awt.*;
 import java.awt.datatransfer.DataFlavor;
+import java.awt.datatransfer.StringSelection;
 import java.awt.event.KeyEvent;
 import java.awt.KeyboardFocusManager;
 import java.awt.event.MouseAdapter;
@@ -41,9 +42,8 @@ public class InsertGenPanel extends JPanel {
     private JTextField tableNameField;
     private JComboBox<String> pkCombo;
     private JTextField sequenceField;
-    private JButton savePresetBtn;
-    private JButton deletePresetBtn;
     private JButton saveBtn;
+    private JButton deletePresetBtn;
 
     private boolean dirty = false;
     private int selectedViewCol = -1;
@@ -63,9 +63,11 @@ public class InsertGenPanel extends JPanel {
 
         table = new JTable(model);
         table.setAutoResizeMode(JTable.AUTO_RESIZE_OFF);
+        table.setShowGrid(true);
+        table.setShowHorizontalLines(true);
+        table.setShowVerticalLines(true);
         table.getTableHeader().setReorderingAllowed(false);
-        table.setSelectionBackground(table.getBackground());
-        table.setSelectionForeground(table.getForeground());
+        table.setCellSelectionEnabled(true);
 
         // ── Spalten-Auswahl (Header-Klick) fuer Verschieben ─────────────────
         JButton moveLeftBtn  = new JButton("\u25C0");
@@ -199,8 +201,8 @@ public class InsertGenPanel extends JPanel {
             loadPreset(selected);
         });
 
-        savePresetBtn = new JButton("Preset speichern");
-        savePresetBtn.addActionListener(e -> saveCurrentPreset());
+        saveBtn = new JButton("Speichern");
+        saveBtn.addActionListener(e -> saveData());
 
         deletePresetBtn = new JButton("Preset l\u00F6schen");
         deletePresetBtn.addActionListener(e -> deleteCurrentPreset());
@@ -222,7 +224,7 @@ public class InsertGenPanel extends JPanel {
         JPanel presetBar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
         presetBar.add(new JLabel("Preset:"));
         presetBar.add(presetCombo);
-        presetBar.add(savePresetBtn);
+        presetBar.add(saveBtn);
         presetBar.add(deletePresetBtn);
         presetBar.add(Box.createHorizontalStrut(12));
         presetBar.add(new JLabel("Zieltabelle:"));
@@ -234,9 +236,6 @@ public class InsertGenPanel extends JPanel {
         presetBar.add(sequenceField);
 
         // ── Toolbar ─────────────────────────────────────────────────────────
-        saveBtn = new JButton("Speichern");
-        saveBtn.addActionListener(e -> saveData());
-
         JButton addColBtn = new JButton("\u2795");
         addColBtn.setFont(addColBtn.getFont().deriveFont(Font.BOLD, 13f));
         addColBtn.setToolTipText("Neue Spalte hinzuf\u00FCgen");
@@ -303,7 +302,6 @@ public class InsertGenPanel extends JPanel {
         generateBtn.addActionListener(e -> generateScript());
 
         JPanel toolbar = new JPanel(new FlowLayout(FlowLayout.LEFT, 6, 4));
-        toolbar.add(saveBtn);
         toolbar.add(clearAllBtn);
         toolbar.add(addRowBtn);
         toolbar.add(deleteRowsBtn);
@@ -350,6 +348,26 @@ public class InsertGenPanel extends JPanel {
 
         model.addTableModelListener(e -> { rowHeader.revalidate(); resizeRowHeader.run(); });
         scrollPane.setRowHeaderView(rowHeader);
+
+        // ── Copy-Handler (nur Daten, ohne Zeilennummern) ───────────────────
+        table.getActionMap().put("copy", new AbstractAction() {
+            @Override public void actionPerformed(java.awt.event.ActionEvent e) {
+                int[] rows = table.getSelectedRows();
+                int[] cols = table.getSelectedColumns();
+                if (rows.length == 0 || cols.length == 0) return;
+                StringBuilder sb = new StringBuilder();
+                for (int r : rows) {
+                    for (int i = 0; i < cols.length; i++) {
+                        if (i > 0) sb.append(';');
+                        Object val = table.getValueAt(r, cols[i]);
+                        sb.append(val != null ? val.toString().trim() : "");
+                    }
+                    sb.append('\n');
+                }
+                StringSelection sel = new StringSelection(sb.toString());
+                Toolkit.getDefaultToolkit().getSystemClipboard().setContents(sel, null);
+            }
+        });
 
         // ── Zeilenanzahl-Anzeige (nur gefuellte Zeilen) ─────────────────────
         rowCountLabel = new JLabel();
@@ -403,6 +421,18 @@ public class InsertGenPanel extends JPanel {
         add(topPanel,   BorderLayout.NORTH);
         add(scrollPane, BorderLayout.CENTER);
         add(statusBar,  BorderLayout.SOUTH);
+
+        // ── Beispieldaten (falls kein Preset geladen) ──────────────────────
+        if (model.getColumnCount() == 0) {
+            for (String col : new String[]{"ID", "NAME", "BESCHREIBUNG", "WERT", "AKTIV"})
+                model.addColumn(col);
+            model.addRow(new Object[]{"1", "Eintrag A", "Erster Testdatensatz", "100.50", "J"});
+            model.addRow(new Object[]{"2", "Eintrag B", "Zweiter Testdatensatz", "200.00", "J"});
+            model.addRow(new Object[]{"3", "Eintrag C", "Dritter Testdatensatz", "50.75", "N"});
+            tableNameField.setText("BEISPIEL_TABELLE");
+            refreshPkCombo();
+            clearDirty();
+        }
     }
 
     @Override
@@ -696,10 +726,13 @@ public class InsertGenPanel extends JPanel {
             while (lineCount > 0 && lines[lineCount - 1].isBlank()) lineCount--;
             if (lineCount == 0) return;
 
+            // Trennzeichen erkennen: Tab oder Semikolon
+            String delimiter = text.contains("\t") ? "\t" : ";";
+
             // Spaltenanzahl aus Clipboard ermitteln
             int clipCols = 0;
             for (int i = 0; i < lineCount; i++) {
-                int cols = lines[i].split("\t", -1).length;
+                int cols = lines[i].split(delimiter, -1).length;
                 clipCols = Math.max(clipCols, cols);
             }
 
@@ -714,8 +747,8 @@ public class InsertGenPanel extends JPanel {
 
                 int dataStart;
                 if (firstIsHeader) {
-                    String[] headerCells = lines[0].split("\t", -1);
-                    for (String h : headerCells) model.addColumn(h.stripTrailing());
+                    String[] headerCells = lines[0].split(delimiter, -1);
+                    for (String h : headerCells) model.addColumn(h.strip());
                     dataStart = 1;
                 } else {
                     for (int c = 0; c < clipCols; c++) model.addColumn("Spalte_" + (c + 1));
@@ -723,10 +756,10 @@ public class InsertGenPanel extends JPanel {
                 }
 
                 for (int r = dataStart; r < lineCount; r++) {
-                    String[] cells = lines[r].split("\t", -1);
+                    String[] cells = lines[r].split(delimiter, -1);
                     Object[] row = new Object[model.getColumnCount()];
                     for (int c = 0; c < Math.min(cells.length, row.length); c++)
-                        row[c] = cells[c].stripTrailing();
+                        row[c] = cells[c].strip();
                     model.addRow(row);
                 }
 
@@ -742,14 +775,14 @@ public class InsertGenPanel extends JPanel {
             int startCol = Math.max(0, table.getSelectedColumn());
 
             for (int r = 0; r < lineCount; r++) {
-                String[] cells = lines[r].split("\t", -1);
+                String[] cells = lines[r].split(delimiter, -1);
                 int targetRow = startRow + r;
                 while (targetRow >= model.getRowCount())
                     model.addRow(new Object[model.getColumnCount()]);
                 for (int c = 0; c < cells.length; c++) {
                     int targetCol = startCol + c;
                     if (targetCol < model.getColumnCount())
-                        model.setValueAt(cells[c].stripTrailing(), targetRow, targetCol);
+                        model.setValueAt(cells[c].strip(), targetRow, targetCol);
                 }
             }
             autoResizeColumns();
