@@ -140,7 +140,7 @@ public class ExcelSplitService {
         }
     }
 
-    private List<String> buildCsv(Sheet sheet1, String templateName, String templateValue) {
+    List<String> buildCsv(Sheet sheet1, String templateName, String templateValue) {
         int maxCol = 0;
         for (Row row : sheet1) {
             if (row.getLastCellNum() > maxCol) maxCol = row.getLastCellNum();
@@ -197,7 +197,7 @@ public class ExcelSplitService {
         }
     }
 
-    private String getCellValue(Cell cell, Workbook wb) {
+    String getCellValue(Cell cell, Workbook wb) {
         if (cell == null) return "";
 
         CellType type = cell.getCellType();
@@ -222,7 +222,7 @@ public class ExcelSplitService {
         }
     }
 
-    private String escapeCsv(String val) {
+    String escapeCsv(String val) {
         if (val == null || val.isEmpty()) return "";
         // Security: CSV-Formel-Injection verhindern
         if (!val.isEmpty() && "=+-@".indexOf(val.charAt(0)) >= 0) {
